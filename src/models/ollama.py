@@ -1,5 +1,5 @@
-import httpx
-import json
+from typing import AsyncGenerator, Dict, Any, Optional
+from ollama import AsyncClient, ResponseError
 
 from core.config import settings
 from utils.logging import logger
@@ -8,45 +8,53 @@ class ChatOllama:
     
     def __init__(
         self,
+        host: str = settings.OLLAMA_BASE_URL,
         model: str = settings.OLLAMA_MODEL_NAME,
         temperature: float = 1.0,
+        timeout: Optional[float] = None,
     ):
+        self.host = host
         self.model = model
         self.temperature = temperature
-        self.ollama_base_url = settings.OLLAMA_BASE_URL
+        
+        self.client = AsyncClient(
+            host=self.host,
+            timeout=timeout,
+        )
 
-    async def generate_response(self, messages: list):
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "stream": True,
-            "options": {
-                "temperature": self.temperature,
-            },
+    async def generate_response(self, messages: list) -> AsyncGenerator[Dict[str, Any], None]:
+        try:
+            stream = await self.client.chat(
+                model=self.model,
+                messages=messages,
+                stream=True,
+                options={"temperature": self.temperature},
+            )
+            
+            async for chunk in stream:
+                yield {
+                    "message": {
+                        "content": chunk.message.content if chunk.message else "",
+                    },
+                    "done": chunk.done,
+                }
+                
+        except ResponseError as e:
+            error_msg = self._handle_ollama_error(e)
+            logger.error(f"Ollama API error: {error_msg}")
+            raise  
+        except Exception as e:
+            logger.error(f"Unexpected Ollama error: {str(e)}")
+            raise ConnectionError(f"Ollama communication failed: {str(e)}")
+    
+    def _handle_ollama_error(self, error: ResponseError) -> str:
+        error_mapping = {
+            404: "Model not found or Ollama not running",
+            500: "Ollama internal server error",
+            524: "Request timeout",
         }
         
-        logger.debug(f"Sending request to Ollama: {payload}")
-
-        async with httpx.AsyncClient(timeout=None) as client:
-            try:
-                async with client.stream(
-                    "POST",
-                    f"{self.ollama_base_url}/api/chat",
-                    json=payload,
-                ) as response:
-                    response.raise_for_status()
-                    async for line in response.aiter_lines():
-                        if not line.strip():
-                            continue
-                        try:
-                            data = json.loads(line)
-                            yield data
-                        except json.JSONDecodeError as e:
-                            logger.error(f"Failed to parse Ollama response: {e}")
-                            raise ValueError(f"Invalid JSON from Ollama: {line}")
-            except httpx.RequestError as e:
-                logger.error(f"Ollama connection failed: {e}")
-                raise ConnectionError(f"Failed to connect to Ollama: {str(e)}")
-            except httpx.HTTPStatusError as e:
-                logger.error(f"Ollama returned error: {e.response.status_code}")
-                raise RuntimeError(f"Ollama error {e.response.status_code}: {str(e)}")
+        if error.status_code in error_mapping:
+            return error_mapping[error.status_code]
+        
+        return f"HTTP {error.status_code}: {error.error}"

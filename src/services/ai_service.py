@@ -28,17 +28,20 @@ class AiService:
         except asyncio.CancelledError:
             logger.info("Generation cancelled by user")
             raise
+        except ConnectionError as e:
+            logger.error(f"Ollama connection failed: {e}")
+            raise AiGenerationError(f"Ollama service unavailable: {str(e)}")
         except Exception as e:
             logger.error(f"AI generation failed: {e}")
-            raise AiGenerationError(f"Generation failed: {e}")
-    
+            raise AiGenerationError(f"Generation failed: {str(e)}")
+
     async def generate_completion(self, request: AiRequest) -> str:
         full_response = ""
         async for chunk in self.generate_stream(request):
             full_response += chunk
         return full_response
     
-    def _build_llm_messages(self, request: AiRequest):
+    def _build_llm_messages(self, request: AiRequest) -> list:
         messages = [
             {
                 "role": "system",
