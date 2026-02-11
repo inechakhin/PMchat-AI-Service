@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import FastAPI, APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from schemas.ai import AiRequest
@@ -7,9 +7,9 @@ from services.ai_service import AiService, get_ai_service
 from utils.logging import logger
 from core.exceptions.ai_generation_error import AiGenerationError
 
-router = APIRouter(prefix="/internal/api/ai", tags=["ai"])
+ai_router = APIRouter(prefix="/internal/api/ai", tags=["ai"])
 
-@router.post("/generate-stream")
+@ai_router.post("/generate-stream")
 async def generate_stream(
     request: AiRequest,
     ai_service: AiService = Depends(get_ai_service)
@@ -35,7 +35,7 @@ async def generate_stream(
         },
     )
 
-@router.post("/generate")
+@ai_router.post("/generate")
 async def generate(
     request: AiRequest,
     ai_service: AiService = Depends(get_ai_service)

@@ -1,6 +1,6 @@
 import os
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 
 class Config(BaseSettings):
     
@@ -9,8 +9,11 @@ class Config(BaseSettings):
     LOGS_DIR: str = os.path.join(BASE_DIR, "logs") 
     
     # Ollama
-    OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    OLLAMA_MODEL_NAME: str = os.getenv("OLLAMA_MODEL_NAME", "qwen2.5:3b")
+    OLLAMA_BASE_URL: str = Field("http://localhost:11434", env="OLLAMA_BASE_URL")
+    OLLAMA_MODEL_NAME: str = Field("qwen2.5:3b", env = "OLLAMA_MODEL_NAME")
+    
+    # CORS
+    ALLOWED_ORIGINS: list[str] = Field(["*"], env="ALLOWED_ORIGINS")
     
     model_config = SettingsConfigDict(
         env_file=os.path.join(BASE_DIR, ".env"),
