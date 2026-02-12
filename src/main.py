@@ -39,8 +39,6 @@ app.include_router(ai_router)
 
 if __name__ == "__main__":
     logger.info(f"Starting AI Service on 0.0.0.0:8000")
-    logger.info(f"Ollama URL: {settings.OLLAMA_BASE_URL}")
-    logger.info(f"Ollama Model: {settings.OLLAMA_MODEL_NAME}")
     
     uvicorn.run(
         "main:app",
