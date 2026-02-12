@@ -1,15 +1,30 @@
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
+from core.app_state import state
+from models.ollama import ChatOllama
+from services.ai_service import AiService
 from routers.ai_router import ai_router
 from utils.logging import logger
 from core.config import settings
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    llm = ChatOllama()
+    await llm.pull_model()
+
+    state.llm = llm
+    state.ai_service = AiService(llm)
+
+    yield
 
 app = FastAPI(
     title="AI Service API",
     description="Service for AI text generation using Ollama",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

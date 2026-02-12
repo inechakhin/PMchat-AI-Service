@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from schemas.ai import AiRequest
-from services.ai_service import AiService, get_ai_service
+from services.ai_service import AiService
+from dependencies.ai import get_ai_service
 from utils.logging import logger
 from core.exceptions.ai_generation_error import AiGenerationError
 
@@ -28,11 +29,7 @@ async def generate_stream(
     
     return StreamingResponse(
         stream_generator(),
-        media_type="text/event-stream",
-        headers={
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-        },
+        media_type="text/plain",
     )
 
 @ai_router.post("/generate")

@@ -1,3 +1,4 @@
+import asyncio
 from typing import AsyncGenerator, Dict, Any, Optional
 from ollama import AsyncClient, ResponseError
 
@@ -8,19 +9,44 @@ class ChatOllama:
     
     def __init__(
         self,
-        host: str = settings.OLLAMA_BASE_URL,
+        host: str = settings.OLLAMA_HOST,
+        port: int = settings.OLLAMA_PORT,
         model: str = settings.OLLAMA_MODEL_NAME,
         temperature: float = 1.0,
         timeout: Optional[float] = None,
     ):
-        self.host = host
+        self.ollama_base_url = f"http://{host}:{port}"
         self.model = model
         self.temperature = temperature
         
         self.client = AsyncClient(
-            host=self.host,
+            host=self.ollama_base_url,
             timeout=timeout,
         )
+
+    async def pull_model(self, retries: int = 30, delay: float = 2.0) -> None:
+        # ensure_ready
+        for _ in range(retries):
+            try:
+                await self.client.list()
+                logger.info("Ollama API is available")
+                break
+            except Exception:
+                logger.info("Waiting for Ollama API...")
+                await asyncio.sleep(delay)
+        else:
+            raise RuntimeError("Ollama API not available")
+
+        # pull_model
+        models = await self.client.list()
+        model_names = {m.model for m in models.models}
+
+        if self.model not in model_names:
+            logger.info(f"Pulling Ollama model: {self.model}")
+            await self.client.pull(self.model)
+            logger.info("Model pulled successfully")
+        else:
+            logger.info(f"Model {self.model} already exists")
 
     async def generate_response(self, messages: list) -> AsyncGenerator[Dict[str, Any], None]:
         try:

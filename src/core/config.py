@@ -9,7 +9,8 @@ class Config(BaseSettings):
     LOGS_DIR: str = os.path.join(BASE_DIR, "logs") 
     
     # Ollama
-    OLLAMA_BASE_URL: str = Field("http://localhost:11434", env="OLLAMA_BASE_URL")
+    OLLAMA_HOST: str = Field("localhost", env="OLLAMA_HOST")
+    OLLAMA_PORT: int = Field(11434, env="OLLAMA_PORT")
     OLLAMA_MODEL_NAME: str = Field("qwen2.5:3b", env = "OLLAMA_MODEL_NAME")
     
     # CORS

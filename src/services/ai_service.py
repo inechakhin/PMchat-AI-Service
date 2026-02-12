@@ -9,8 +9,8 @@ from core.exceptions.ai_generation_error import AiGenerationError
 
 class AiService:
     
-    def __init__(self):
-        self.llm = ChatOllama()
+    def __init__(self, llm: ChatOllama):
+        self.llm = llm
     
     async def generate_stream(self, request: AiRequest) -> AsyncGenerator[str, None]:
         llm_messages = self._build_llm_messages(request)
@@ -56,8 +56,3 @@ class AiService:
             for message in request.messages
         )
         return messages
-
-ai_service = AiService()
-
-def get_ai_service():
-    return ai_service
