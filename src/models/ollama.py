@@ -1,5 +1,6 @@
 import asyncio
-from typing import AsyncGenerator, Dict, Any, Optional
+import json
+from typing import AsyncGenerator, Dict, Any, List, Optional
 from ollama import AsyncClient, ResponseError
 
 from core.config import settings
@@ -17,7 +18,7 @@ class ChatOllama:
     ):
         self.ollama_base_url = f"http://{host}:{port}"
         self.model = model
-        self.temperature = temperature
+        self.options = {"temperature": temperature}
         
         self.client = AsyncClient(
             host=self.ollama_base_url,
@@ -48,22 +49,26 @@ class ChatOllama:
         else:
             logger.info(f"Model {self.model} already exists")
 
-    async def generate_response(self, messages: list) -> AsyncGenerator[Dict[str, Any], None]:
+    async def stream(
+        self, 
+        messages: List[Dict[str, str]],
+    ) -> AsyncGenerator[str, None]:
         try:
             stream = await self.client.chat(
                 model=self.model,
                 messages=messages,
                 stream=True,
-                options={"temperature": self.temperature},
+                options=self.options,
             )
             
             async for chunk in stream:
-                yield {
-                    "message": {
-                        "content": chunk.message.content if chunk.message else "",
-                    },
-                    "done": chunk.done,
-                }
+                msg = chunk.message
+                
+                if msg.content and msg.content.strip():
+                    yield msg.content
+                
+                if chunk.done:
+                    break
                 
         except ResponseError as e:
             error_msg = self._handle_ollama_error(e)
@@ -72,7 +77,52 @@ class ChatOllama:
         except Exception as e:
             logger.error(f"Unexpected Ollama error: {str(e)}")
             raise ConnectionError(f"Ollama communication failed: {str(e)}")
-    
+
+    async def invoke(
+        self, 
+        messages: List[Dict[str, str]],
+        tools: Optional[List[Dict]] = None,
+    ) -> Dict[str, Any]:
+        try:
+            response = await self.client.chat(
+                model=self.model,
+                messages=messages,
+                tools=tools,
+                stream=False,
+                options=self.options,
+            )
+            
+            message = response.message
+            tool_calls = None
+            
+            if message.tool_calls:
+                tool_calls = [
+                    {
+                        "id": call.id,
+                        "type": "function",
+                        "function": {
+                            "name": call.function.name,
+                            "arguments": json.loads(call.function.arguments) if isinstance(call.function.arguments, str) else call.function.arguments,
+                        }
+                    }
+                    for call in message.tool_calls
+                ]
+
+            return {
+                "message": {
+                    "content": message.content if message else "",
+                    "tool_calls": tool_calls,
+                }
+            }
+            
+        except ResponseError as e:
+            error_msg = self._handle_ollama_error(e)
+            logger.error(f"Ollama API error: {error_msg}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected Ollama error: {str(e)}")
+            raise ConnectionError(f"Ollama communication failed: {str(e)}")
+
     def _handle_ollama_error(self, error: ResponseError) -> str:
         error_mapping = {
             404: "Model not found or Ollama not running",
