@@ -1,58 +1,124 @@
 import asyncio
-from typing import AsyncGenerator
+import json
+from typing import AsyncGenerator, List, Dict, Any
 
 from models.ollama import ChatOllama
-from schemas.ai import AiRequest
-from core.prompts import SYSTEM_PROMPT
+from schemas.ai import AiRequest, AiMessage, AiAttachment, AiResponse
+from core.llm_tools import TOOLS
+from core.prompts import SYSTEM_PROMPT, CHAT_TITLE_PROMPT
+from services.rag_service import RagService
 from utils.logging import logger
-from core.exceptions.ai_generation_error import AiGenerationError
 
 class AiService:
     
-    def __init__(self, llm: ChatOllama):
+    def __init__(
+        self, 
+        llm: ChatOllama,
+        rag: RagService,
+    ):
         self.llm = llm
+        self.rag = rag
+        self.tools = TOOLS
     
-    async def generate_stream(self, request: AiRequest) -> AsyncGenerator[str, None]:
-        llm_messages = self._build_llm_messages(request)
-        
+    async def generate_response(self, request: AiRequest) -> AsyncGenerator[AiResponse, None]:
         try:
-            async for data_chunk in self.llm.generate_response(llm_messages):
-                if "message" in data_chunk and "content" in data_chunk["message"]:
-                    content = data_chunk["message"]["content"]
-                    if content:
-                        yield content
-                
-                if data_chunk.get("done", False):
-                    break
-                
+            llm_messages = self._build_llm_messages(SYSTEM_PROMPT, request.messages)
+            response = await self.llm.invoke(llm_messages, tools=self.tools)
+        
+            llm_messages, docs = await self._handle_tool_calls(llm_messages, response)
+            
+            async for token in self.llm.stream(llm_messages):
+                if token:
+                    yield AiResponse(token=token)
+            
+            yield AiResponse(attachments=self._build_attachments(docs))
+            
+            if len(request.messages) == 1:
+                chat_title = await self.generate_chat_title(request)
+                yield AiResponse(chat_title=chat_title)
+              
+            yield AiResponse(is_end=True)
+            
         except asyncio.CancelledError:
             logger.info("Generation cancelled by user")
-            raise
+            yield AiResponse(is_end=True)
         except ConnectionError as e:
             logger.error(f"Ollama connection failed: {e}")
-            raise AiGenerationError(f"Ollama service unavailable: {str(e)}")
+            yield AiResponse(
+                is_error=True,
+                error_message=f"Ollama service unavailable: {str(e)}",
+            )
         except Exception as e:
             logger.error(f"AI generation failed: {e}")
-            raise AiGenerationError(f"Generation failed: {str(e)}")
-
-    async def generate_completion(self, request: AiRequest) -> str:
-        full_response = ""
-        async for chunk in self.generate_stream(request):
-            full_response += chunk
-        return full_response
+            yield AiResponse(
+                is_error=True,
+                error_message=f"Generation failed: {str(e)}",
+            )
     
-    def _build_llm_messages(self, request: AiRequest) -> list:
-        messages = [
+    async def generate_chat_title(self, request: AiRequest) -> str:
+        chat_title_messages = self._build_llm_messages(CHAT_TITLE_PROMPT, request.messages[-1:])
+        response = await self.llm.invoke(chat_title_messages, tools=None)
+        return response["message"]["content"]
+
+    def _build_llm_messages(
+        self, 
+        prompt: str, 
+        ai_messages: List[AiMessage],
+    ) -> List[Dict[str, str]]:
+        llm_messages = [
             {
                 "role": "system",
-                "content": SYSTEM_PROMPT,
+                "content": prompt,
             }
         ]
-        messages.extend(
+        llm_messages.extend(
             {
                 "role": message.sender_type, 
                 "content": message.text
             }
-            for message in request.messages
+            for message in ai_messages
         )
-        return messages
+        return llm_messages
+    
+    async def _handle_tool_calls(
+        self, 
+        llm_messages: List[Dict[str, str]], 
+        response: Dict[str, Any],
+    ):
+        docs = []
+        
+        if not response.tool_calls:
+            return llm_messages, docs
+        
+        user_message = llm_messages[-1:]
+        
+        llm_messages.append({
+            "role": "assistant",
+            "content": "",
+            "function_call": response.tool_calls[0]["function"],
+        })
+
+        for tool_call in response.tool_calls:
+            if tool_call["function"]["name"] == "search_project_docs":
+                tool_response, docs = await self.rag.get_relevant_docs(user_message)
+                
+                llm_messages.append({
+                    "role": "function",
+                    "name": "search_project_docs",
+                    "content": json.dumps({"results": tool_response}, ensure_ascii=False),
+                })
+        
+        return llm_messages, docs
+    
+    def _build_attachments(
+        self,
+        docs: List[Dict[str, Any]],
+    ) -> List[AiAttachment]:
+        return [
+            AiAttachment(
+                doc_title=doc["doc_title"]
+            )
+            for doc in docs
+        ]
+                
+        
