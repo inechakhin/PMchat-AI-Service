@@ -98,7 +98,6 @@ class ChatOllama:
             if message.tool_calls:
                 tool_calls = [
                     {
-                        "id": call.id,
                         "type": "function",
                         "function": {
                             "name": call.function.name,

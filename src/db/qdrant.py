@@ -38,12 +38,15 @@ class QdrantDBClient:
         filter: Optional[dict] = None,
         limit: int = 10,
     ) -> Optional[SearchResult]:
-        field_conditions = self._create_field_conditions(filter)
+        query_filter = None
+        if filter:
+            field_conditions = self._create_field_conditions(filter)
+            query_filter = models.Filter(should=field_conditions)
         
         query_response = await self.client.query_points(
             collection_name=collection_name,
             query=vector,
-            query_filter=models.Filter(should=field_conditions),
+            query_filter=query_filter,
             limit=limit,
         )
         

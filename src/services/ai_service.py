@@ -29,31 +29,31 @@ class AiService:
             
             async for token in self.llm.stream(llm_messages):
                 if token:
-                    yield AiResponse(token=token)
+                    yield AiResponse(token=token).model_dump_json(indent=2)
             
-            yield AiResponse(attachments=self._build_attachments(docs))
+            yield AiResponse(attachments=self._build_attachments(docs)).model_dump_json(indent=2)
             
             if len(request.messages) == 1:
                 chat_title = await self.generate_chat_title(request)
-                yield AiResponse(chat_title=chat_title)
+                yield AiResponse(chat_title=chat_title).model_dump_json(indent=2)
               
-            yield AiResponse(is_end=True)
+            yield AiResponse(is_end=True).model_dump_json(indent=2)
             
         except asyncio.CancelledError:
             logger.info("Generation cancelled by user")
-            yield AiResponse(is_end=True)
+            yield AiResponse(is_end=True).model_dump_json(indent=2)
         except ConnectionError as e:
             logger.error(f"Ollama connection failed: {e}")
             yield AiResponse(
                 is_error=True,
                 error_message=f"Ollama service unavailable: {str(e)}",
-            )
+            ).model_dump_json(indent=2)
         except Exception as e:
             logger.error(f"AI generation failed: {e}")
             yield AiResponse(
                 is_error=True,
                 error_message=f"Generation failed: {str(e)}",
-            )
+            ).model_dump_json(indent=2)
     
     async def generate_chat_title(self, request: AiRequest) -> str:
         chat_title_messages = self._build_llm_messages(CHAT_TITLE_PROMPT, request.messages[-1:])
@@ -87,23 +87,30 @@ class AiService:
     ):
         docs = []
         
-        if not response.tool_calls:
+        tool_calls = response["message"].get("tool_calls")
+        if not tool_calls:
             return llm_messages, docs
         
-        user_message = llm_messages[-1:]
+        #user_message = llm_messages[-1:]
+        
+        user_message_content = ""
+        for msg in reversed(llm_messages):
+            if msg["role"] == "user":
+                user_message_content = msg["content"]
+                break
         
         llm_messages.append({
             "role": "assistant",
             "content": "",
-            "function_call": response.tool_calls[0]["function"],
+            "function_call": tool_calls[0]["function"],
         })
 
-        for tool_call in response.tool_calls:
+        for tool_call in tool_calls:
             if tool_call["function"]["name"] == "search_project_docs":
-                tool_response, docs = await self.rag.get_relevant_docs(user_message)
+                tool_response, docs = await self.rag.get_relevant_docs(user_message_content)
                 
                 llm_messages.append({
-                    "role": "function",
+                    "role": "tool",
                     "name": "search_project_docs",
                     "content": json.dumps({"results": tool_response}, ensure_ascii=False),
                 })

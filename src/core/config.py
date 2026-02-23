@@ -8,6 +8,7 @@ class Config(BaseSettings):
     BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
     LOGS_DIR: Path = BASE_DIR / "logs"
     DATA_DIR: Path = BASE_DIR / "data"
+    DATA_MD_DIR: Path = BASE_DIR / "data_md"
     
     # Ollama
     OLLAMA_HOST: str = Field("localhost", env="OLLAMA_HOST")

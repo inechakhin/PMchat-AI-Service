@@ -1,12 +1,13 @@
 from pathlib import Path
 from typing import List
+import uuid
 
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from db.qdrant import QdrantDBClient
 from schemas.vector import VectorItem
 from core.config import settings
-from utils.data_working import read_file, split_text_into_chunks
+from utils.data_working import read_file, pdf_to_markdown, split_text_into_chunks, save_markdown
 from utils.logging import logger
 
 class RagService:
@@ -26,11 +27,11 @@ class RagService:
         self.vector_store = QdrantDBClient()
         
         if hard_init:
-            self.vector_store.reset()
+            await self.vector_store.reset()
             logger.success("Векторное хранилище полностью очищено")
             
-        if not self.vector_store.has_collection(settings.COLLECTION_NAME):
-            self.add_docs_in_vector_store(settings.DATA_DIR)
+        if not await self.vector_store.has_collection(settings.COLLECTION_NAME):
+            await self.add_docs_in_vector_store(settings.DATA_DIR)
             logger.success("В векторное хранилище загружены документы")
     
     async def add_docs_in_vector_store(self, folder: Path, extensions: List = ['.pdf']) -> None:
@@ -45,10 +46,19 @@ class RagService:
             
             for file_path in folder.glob(pattern):
                 try:
-                    text = read_file(file_path)
+                    text = ""
+                    if clean_ext == "pdf":
+                        text = pdf_to_markdown(file_path)
+                        md_file = settings.DATA_MD_DIR / f"{file_path.stem}.md"
+                        save_markdown(text, md_file)
+                    else:
+                        text = read_file(file_path)
+                    
                     chunks = split_text_into_chunks(text)
+                    
                     vector_items = self._create_vector_items(file_path, chunks)
-                    await self.vector_store.insert(settings.COLLECTION_NAME, vector_items)
+                    
+                    await self.vector_store.upsert(settings.COLLECTION_NAME, vector_items)
                     
                     logger.info(f"Обработан файл {file_path}, создано {len(chunks)} чанков.")
                     
@@ -56,7 +66,7 @@ class RagService:
                     print(f"Ошибка при обработке файла {file_path}: {e}")
                     continue
                 
-    async def get_relevant_docs(self, query: str, limit: int = 5):
+    async def get_relevant_docs(self, query: str, limit: int = 2):
         vector = self.embedding_function.embed_query(query)
         
         search_result = await self.vector_store.search(
@@ -85,15 +95,15 @@ class RagService:
         return "\n---\n".join(formatted_texts), docs
                 
     def _create_vector_items(self, file_path: Path, chunks: List[str]):
-        doc_id=file_path.stem,
-        doc_title=file_path.name
+        doc_id = file_path.stem
+        doc_title = file_path.name
         total_chunks = len(chunks)
         
         vectors = self.embedding_function.embed_documents(chunks)
         
         return [
             VectorItem(
-                id=f"{doc_id}_chunk_{id}",
+                id=str(uuid.uuid4()),
                 text=chunks[id],
                 vector=vectors[id],
                 metadata={

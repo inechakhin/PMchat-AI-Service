@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
 
     state.llm = llm
     state.rag_service = rag_service
-    state.ai_service = AiService(llm)
+    state.ai_service = AiService(llm, rag_service)
 
     yield
 
