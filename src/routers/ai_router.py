@@ -11,7 +11,7 @@ ai_router = APIRouter(prefix="/internal/api/ai", tags=["ai"])
 async def generate_stream(
     request: AiRequest,
     ai_service: AiService = Depends(get_ai_service)
-):    
+):
     return StreamingResponse(
         ai_service.generate_response(request),
         media_type="text/plain",

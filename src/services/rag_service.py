@@ -66,7 +66,7 @@ class RagService:
                     print(f"Ошибка при обработке файла {file_path}: {e}")
                     continue
                 
-    async def get_relevant_docs(self, query: str, limit: int = 2):
+    async def get_relevant_docs(self, query: str, limit: int = 3):
         vector = self.embedding_function.embed_query(query)
         
         search_result = await self.vector_store.search(

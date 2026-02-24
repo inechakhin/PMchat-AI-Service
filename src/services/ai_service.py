@@ -91,23 +91,18 @@ class AiService:
         if not tool_calls:
             return llm_messages, docs
         
-        #user_message = llm_messages[-1:]
-        
-        user_message_content = ""
-        for msg in reversed(llm_messages):
-            if msg["role"] == "user":
-                user_message_content = msg["content"]
-                break
-        
-        llm_messages.append({
-            "role": "assistant",
-            "content": "",
-            "function_call": tool_calls[0]["function"],
-        })
-
         for tool_call in tool_calls:
+            llm_messages.append({
+                "role": "assistant",
+                "content": "",
+                "function_call": tool_call["function"],
+            })
+            
             if tool_call["function"]["name"] == "search_project_docs":
-                tool_response, docs = await self.rag.get_relevant_docs(user_message_content)
+                query = tool_call["function"]["arguments"]["query"]
+                top_k = tool_call["function"]["arguments"]["top_k"]
+                
+                tool_response, docs = await self.rag.get_relevant_docs(query=query, limit=top_k)
                 
                 llm_messages.append({
                     "role": "tool",
@@ -127,5 +122,3 @@ class AiService:
             )
             for doc in docs
         ]
-                
-        
