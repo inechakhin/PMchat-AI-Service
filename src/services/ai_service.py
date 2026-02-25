@@ -29,31 +29,31 @@ class AiService:
             
             async for token in self.llm.stream(llm_messages):
                 if token:
-                    yield AiResponse(token=token).model_dump_json(indent=2)
+                    yield AiResponse(token=token).model_dump_json() + "\n"
             
-            yield AiResponse(attachments=self._build_attachments(docs)).model_dump_json(indent=2)
+            yield AiResponse(attachments=self._build_attachments(docs)).model_dump_json() + "\n"
             
             if len(request.messages) == 1:
                 chat_title = await self.generate_chat_title(request)
-                yield AiResponse(chat_title=chat_title).model_dump_json(indent=2)
+                yield AiResponse(chat_title=chat_title).model_dump_json() + "\n"
               
-            yield AiResponse(is_end=True).model_dump_json(indent=2)
+            yield AiResponse(is_end=True).model_dump_json() + "\n"
             
         except asyncio.CancelledError:
             logger.info("Generation cancelled by user")
-            yield AiResponse(is_end=True).model_dump_json(indent=2)
+            yield AiResponse(is_end=True).model_dump_json() + "\n"
         except ConnectionError as e:
             logger.error(f"Ollama connection failed: {e}")
             yield AiResponse(
                 is_error=True,
                 error_message=f"Ollama service unavailable: {str(e)}",
-            ).model_dump_json(indent=2)
+            ).model_dump_json() + "\n"
         except Exception as e:
             logger.error(f"AI generation failed: {e}")
             yield AiResponse(
                 is_error=True,
                 error_message=f"Generation failed: {str(e)}",
-            ).model_dump_json(indent=2)
+            ).model_dump_json() + "\n"
     
     async def generate_chat_title(self, request: AiRequest) -> str:
         chat_title_messages = self._build_llm_messages(CHAT_TITLE_PROMPT, request.messages[-1:])
@@ -107,7 +107,7 @@ class AiService:
                 llm_messages.append({
                     "role": "tool",
                     "name": "search_project_docs",
-                    "content": json.dumps({"results": tool_response}, ensure_ascii=False),
+                    "content": json.dumps({"retrieved_docs": tool_response}, ensure_ascii=False),
                 })
         
         return llm_messages, docs
