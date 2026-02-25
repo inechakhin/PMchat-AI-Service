@@ -16,7 +16,7 @@ class RagService:
         self.embedding_function = HuggingFaceEmbeddings(
             model_name=settings.EMBEDDER_MODEL_NAME,
             model_kwargs={
-                # "device": "cuda" if th.cuda.is_available() else "cpu"
+                #"device": "cuda" if th.cuda.is_available() else "cpu",
                 "device": "cpu",
                 "trust_remote_code": True,
             },
@@ -95,7 +95,7 @@ class RagService:
         return "\n---\n".join(formatted_texts), docs
                 
     def _create_vector_items(self, file_path: Path, chunks: List[str]):
-        doc_id = file_path.stem
+        #doc_id = file_path.stem
         doc_title = file_path.name
         total_chunks = len(chunks)
         
@@ -107,11 +107,11 @@ class RagService:
                 text=chunks[id],
                 vector=vectors[id],
                 metadata={
-                    "doc_id": doc_id,
+                    #"doc_id": doc_id,
                     "doc_title": doc_title,
-                    "chunk_index": id,
-                    "total_chunks": total_chunks,
-                    "file_path": str(file_path)
+                    #"chunk_index": id,
+                    #"total_chunks": total_chunks,
+                    #"file_path": str(file_path),
                 }
             )
             for id in range(total_chunks)
