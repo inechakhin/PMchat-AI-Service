@@ -43,7 +43,7 @@ app.add_middleware(
 app.include_router(ai_router)
 
 if __name__ == "__main__":
-    logger.info(f"Starting AI Service on 0.0.0.0:8000")
+    logger.info("Starting AI Service on 0.0.0.0:8000")
     
     uvicorn.run(
         "main:app",

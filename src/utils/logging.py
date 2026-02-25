@@ -6,7 +6,7 @@ from core.config import settings
 logger.remove()
 
 logger.add(
-    os.path.join(settings.LOGS_DIR, "rag_component.log"),
+    os.path.join(settings.LOGS_DIR, "ai_service.log"),
     rotation="10 MB",
     retention="7 days",
     level="DEBUG",
