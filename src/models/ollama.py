@@ -64,8 +64,7 @@ class ChatOllama:
             async for chunk in stream:
                 msg = chunk.message
                 
-                if msg.content and msg.content.strip():
-                    yield msg.content
+                yield msg.content
                 
                 if chunk.done:
                     break

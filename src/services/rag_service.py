@@ -3,11 +3,12 @@ from typing import List
 import uuid
 
 from langchain_huggingface import HuggingFaceEmbeddings
+from markitdown import MarkItDown
 
 from db.qdrant import QdrantDBClient
 from schemas.vector import VectorItem
 from core.config import settings
-from utils.data_working import read_file, pdf_to_markdown, split_text_into_chunks, save_markdown
+from utils.data_working import read_file, split_text_into_chunks, save_markdown
 from utils.logging import logger
 
 class RagService:
@@ -22,6 +23,7 @@ class RagService:
             },
             encode_kwargs={"normalize_embeddings": True},
         )
+        self.md = MarkItDown(enable_plugins=False)
     
     async def init_vector_store(self, hard_init: bool = False):
         self.vector_store = QdrantDBClient()
@@ -47,12 +49,13 @@ class RagService:
             for file_path in folder.glob(pattern):
                 try:
                     text = ""
-                    if clean_ext == "pdf":
-                        text = pdf_to_markdown(file_path)
+                    if clean_ext == "md":
+                        text = read_file(file_path)
+                    else:
+                        result = self.md.convert(file_path)
+                        text = result.text_content
                         md_file = settings.DATA_MD_DIR / f"{file_path.stem}.md"
                         save_markdown(text, md_file)
-                    else:
-                        text = read_file(file_path)
                     
                     chunks = split_text_into_chunks(text)
                     
