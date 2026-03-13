@@ -13,11 +13,13 @@ class ChatOllama:
         host: str = settings.OLLAMA_HOST,
         port: int = settings.OLLAMA_PORT,
         model: str = settings.OLLAMA_MODEL_NAME,
+        embedder: str = settings.OLLAMA_EMBEDDER_NAME,
         temperature: float = 1.0,
         timeout: Optional[float] = None,
     ):
         self.ollama_base_url = f"http://{host}:{port}"
         self.model = model
+        self.embedder = embedder
         self.options = {"temperature": temperature}
         
         self.client = AsyncClient(
@@ -48,6 +50,14 @@ class ChatOllama:
             logger.info("Model pulled successfully")
         else:
             logger.info(f"Model {self.model} already exists")
+        
+        if self.embedder and self.embedder != self.model:
+            if self.embedder not in model_names:
+                logger.info(f"Pulling Ollama embedder model: {self.embedder}")
+                await self.client.pull(self.embedder)
+                logger.info("Embedder model pulled successfully")
+            else:
+                logger.info(f"Embedder model {self.embedder} already exists")
 
     async def stream(
         self, 
@@ -100,7 +110,9 @@ class ChatOllama:
                         "type": "function",
                         "function": {
                             "name": call.function.name,
-                            "arguments": json.loads(call.function.arguments) if isinstance(call.function.arguments, str) else call.function.arguments,
+                            "arguments": json.loads(call.function.arguments) 
+                                if isinstance(call.function.arguments, str) 
+                                else call.function.arguments,
                         }
                     }
                     for call in message.tool_calls
@@ -120,6 +132,40 @@ class ChatOllama:
         except Exception as e:
             logger.error(f"Unexpected Ollama error: {str(e)}")
             raise ConnectionError(f"Ollama communication failed: {str(e)}")
+
+    async def embed_query(self, text: str) -> List[float]:
+        try:
+            response = await self.client.embed(
+                model=self.embedder,
+                input=text
+            )
+            
+            return response.embeddings[0] if response else ()
+            
+        except ResponseError as e:
+            error_msg = self._handle_ollama_error(e)
+            logger.error(f"Ollama embed error: {error_msg}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected Ollama embed error: {str(e)}")
+            raise ConnectionError(f"Ollama embed failed: {str(e)}")
+        
+    async def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        try:
+            response = await self.client.embed(
+                model=self.embedder,
+                input=texts
+            )
+            
+            return response.embeddings if response else ()
+            
+        except ResponseError as e:
+            error_msg = self._handle_ollama_error(e)
+            logger.error(f"Ollama embed error: {error_msg}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected Ollama embed error: {str(e)}")
+            raise ConnectionError(f"Ollama embed failed: {str(e)}")
 
     def _handle_ollama_error(self, error: ResponseError) -> str:
         error_mapping = {

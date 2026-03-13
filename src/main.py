@@ -13,15 +13,15 @@ from core.config import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    llm = ChatOllama()
-    await llm.pull_model()
+    ollama = ChatOllama()
+    await ollama.pull_model()
+    state.ollama = ollama
     
-    rag_service = RagService()
+    rag_service = RagService(ollama)
     await rag_service.init_vector_store()
-
-    state.llm = llm
     state.rag_service = rag_service
-    state.ai_service = AiService(llm, rag_service)
+    
+    state.ai_service = AiService(ollama, rag_service)
 
     yield
 

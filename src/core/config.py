@@ -14,6 +14,7 @@ class Config(BaseSettings):
     OLLAMA_HOST: str = Field("localhost", env="OLLAMA_HOST")
     OLLAMA_PORT: int = Field(11434, env="OLLAMA_PORT")
     OLLAMA_MODEL_NAME: str = Field("qwen2.5:3b", env = "OLLAMA_MODEL_NAME")
+    OLLAMA_EMBEDDER_NAME: str = Field("qwen3-embedding:0.6b", env = "OLLAMA_EMBEDDER_NAME")
     
     # Qdrant
     QDRANT_HOST: str = Field("localhost", env="QDRANT_HOST")
@@ -29,7 +30,6 @@ class Config(BaseSettings):
     
     # RAG Service
     COLLECTION_NAME: str = Field("project_docs", env = "COLLECTION_NAME")
-    EMBEDDER_MODEL_NAME: str = Field("intfloat/multilingual-e5-large-instruct", env = "EMBEDDER_MODEL_NAME")
     
     # CORS
     ALLOWED_ORIGINS: list[str] = Field(["*"], env="ALLOWED_ORIGINS")

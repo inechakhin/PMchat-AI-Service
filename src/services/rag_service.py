@@ -1,10 +1,9 @@
 from pathlib import Path
 from typing import List
 import uuid
-
-from langchain_huggingface import HuggingFaceEmbeddings
 from markitdown import MarkItDown
 
+from models.ollama import ChatOllama
 from db.qdrant import QdrantDBClient
 from schemas.vector import VectorItem
 from core.config import settings
@@ -13,19 +12,17 @@ from utils.logging import logger
 
 class RagService:
 
-    def __init__(self):        
-        self.embedding_function = HuggingFaceEmbeddings(
-            model_name=settings.EMBEDDER_MODEL_NAME,
-            model_kwargs={
-                #"device": "cuda" if th.cuda.is_available() else "cpu",
-                "device": "cpu",
-                "trust_remote_code": True,
-            },
-            encode_kwargs={"normalize_embeddings": True},
-        )
+    def __init__(
+        self,
+        embedder: ChatOllama,
+    ):        
+        self.embedder = embedder
         self.md = MarkItDown(enable_plugins=False)
+        self.vector_store = None
     
     async def init_vector_store(self, hard_init: bool = False):
+        if self.vector_store:
+            return
         self.vector_store = QdrantDBClient()
         
         if hard_init:
@@ -59,7 +56,7 @@ class RagService:
                     
                     chunks = split_text_into_chunks(text)
                     
-                    vector_items = self._create_vector_items(file_path, chunks)
+                    vector_items = await self._create_vector_items(file_path, chunks)
                     
                     await self.vector_store.upsert(settings.COLLECTION_NAME, vector_items)
                     
@@ -70,7 +67,7 @@ class RagService:
                     continue
                 
     async def get_relevant_docs(self, query: str, limit: int = 3):
-        vector = self.embedding_function.embed_query(query)
+        vector = await self.embedder.embed_query(query)
         
         search_result = await self.vector_store.search(
             collection_name=settings.COLLECTION_NAME,
@@ -97,12 +94,12 @@ class RagService:
         
         return "\n---\n".join(formatted_texts), docs
                 
-    def _create_vector_items(self, file_path: Path, chunks: List[str]):
+    async def _create_vector_items(self, file_path: Path, chunks: List[str]):
         #doc_id = file_path.stem
         doc_title = file_path.name
         total_chunks = len(chunks)
         
-        vectors = self.embedding_function.embed_documents(chunks)
+        vectors = await self.embedder.embed_documents(chunks)
         
         return [
             VectorItem(
