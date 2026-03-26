@@ -155,7 +155,7 @@ class QdrantDBClient:
             metadatas=metadatas,
         )
         
-    def _points_to_search_result(self, points) -> GetResult:
+    def _points_to_search_result(self, points) -> SearchResult:
         get_result = self._points_to_get_result(points)
         return SearchResult(
             ids=get_result.ids,

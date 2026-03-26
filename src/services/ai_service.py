@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import AsyncGenerator, List, Dict, Any
+from typing import AsyncGenerator, Tuple, List, Dict, Any
 
 from models.ollama import ChatOllama
 from schemas.ai import AiRequest, AiMessage, AiAttachment, AiResponse
@@ -34,7 +34,7 @@ class AiService:
             yield AiResponse(attachments=self._build_attachments(docs)).model_dump_json() + "\n"
             
             if len(request.messages) == 1:
-                chat_title = await self.generate_chat_title(request)
+                chat_title = await self._generate_chat_title(request)
                 yield AiResponse(chat_title=chat_title).model_dump_json() + "\n"
               
             yield AiResponse(is_end=True).model_dump_json() + "\n"
@@ -55,7 +55,7 @@ class AiService:
                 error_message=f"Generation failed: {str(e)}",
             ).model_dump_json() + "\n"
     
-    async def generate_chat_title(self, request: AiRequest) -> str:
+    async def _generate_chat_title(self, request: AiRequest) -> str:
         chat_title_messages = self._build_llm_messages(CHAT_TITLE_PROMPT, request.messages[-1:])
         response = await self.llm.invoke(chat_title_messages, tools=None)
         return response["message"]["content"]
@@ -84,7 +84,7 @@ class AiService:
         self, 
         llm_messages: List[Dict[str, str]], 
         response: Dict[str, Any],
-    ):
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, str]]]:
         docs = []
         
         tool_calls = response["message"].get("tool_calls")

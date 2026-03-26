@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List
+from typing import List, Tuple, Dict
 import uuid
 from markitdown import MarkItDown
 
@@ -20,7 +20,7 @@ class RagService:
         self.md = MarkItDown(enable_plugins=False)
         self.vector_store = None
     
-    async def init_vector_store(self, hard_init: bool = False):
+    async def init_vector_store(self, hard_init: bool = False) -> None:
         if self.vector_store:
             return
         self.vector_store = QdrantDBClient()
@@ -66,7 +66,7 @@ class RagService:
                     print(f"Ошибка при обработке файла {file_path}: {e}")
                     continue
                 
-    async def get_relevant_docs(self, query: str, limit: int = 3):
+    async def get_relevant_docs(self, query: str, limit: int = 3) -> Tuple[str, List[Dict[str, str]]]:
         vector = await self.embedder.embed_query(query)
         
         search_result = await self.vector_store.search(
@@ -76,7 +76,7 @@ class RagService:
         )
         
         if not search_result:
-            return [], []
+            return "", []
         
         formatted_texts = []
         docs = []
@@ -94,7 +94,7 @@ class RagService:
         
         return "\n---\n".join(formatted_texts), docs
                 
-    async def _create_vector_items(self, file_path: Path, chunks: List[str]):
+    async def _create_vector_items(self, file_path: Path, chunks: List[str]) -> List[VectorItem]:
         #doc_id = file_path.stem
         doc_title = file_path.name
         total_chunks = len(chunks)

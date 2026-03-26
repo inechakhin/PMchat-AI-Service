@@ -1,6 +1,5 @@
 import uvicorn
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from core.app_state import state
@@ -9,7 +8,6 @@ from services.ai_service import AiService
 from services.rag_service import RagService
 from routers.ai_router import ai_router
 from utils.logging import logger
-from core.config import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,14 +28,6 @@ app = FastAPI(
     description="Service for AI text generation using Ollama",
     version="1.0.0",
     lifespan=lifespan,
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,  # TODO указать конкретные домены
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 app.include_router(ai_router)
