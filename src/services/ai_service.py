@@ -21,23 +21,31 @@ class AiService:
         self.tools = TOOLS
     
     async def generate_response(self, request: AiRequest) -> AsyncGenerator[AiResponse, None]:
+        logger.info("Starting response generation for messages")
         try:
             llm_messages = self._build_llm_messages(SYSTEM_PROMPT, request.messages)
-            response = await self.llm.invoke(llm_messages, tools=self.tools)
-        
-            llm_messages, docs = await self._handle_tool_calls(llm_messages, response)
             
+            logger.info("Invoking LLM with tools")
+            response = await self.llm.invoke(llm_messages, tools=self.tools)
+            
+            logger.info("Checking for tool calls in LLM response")
+            llm_messages, docs = await self._handle_tool_calls(llm_messages, response)
+
+            logger.info("Starting token stream")
             async for token in self.llm.stream(llm_messages):
                 if token:
                     yield AiResponse(token=token).model_dump_json() + "\n"
+            logger.info("Token stream completed")
             
             yield AiResponse(attachments=self._build_attachments(docs)).model_dump_json() + "\n"
             
             if len(request.messages) == 1:
+                logger.info("Generating chat title for new conversation")
                 chat_title = await self._generate_chat_title(request)
                 yield AiResponse(chat_title=chat_title).model_dump_json() + "\n"
               
             yield AiResponse(is_end=True).model_dump_json() + "\n"
+            logger.info("Response generation finished successfully")
             
         except asyncio.CancelledError:
             logger.info("Generation cancelled by user")
@@ -56,6 +64,7 @@ class AiService:
             ).model_dump_json() + "\n"
     
     async def _generate_chat_title(self, request: AiRequest) -> str:
+        logger.info("Building messages for chat title generation")
         chat_title_messages = self._build_llm_messages(CHAT_TITLE_PROMPT, request.messages[-1:])
         response = await self.llm.invoke(chat_title_messages, tools=None)
         return response["message"]["content"]
@@ -89,8 +98,10 @@ class AiService:
         
         tool_calls = response["message"].get("tool_calls")
         if not tool_calls:
+            logger.info("No tool calls detected")
             return llm_messages, docs
         
+        logger.info("Processing tool call(s)")
         for tool_call in tool_calls:
             llm_messages.append({
                 "role": "assistant",

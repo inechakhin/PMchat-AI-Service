@@ -21,19 +21,24 @@ class RagService:
         self.vector_store = None
     
     async def init_vector_store(self, hard_init: bool = False) -> None:
+        logger.info(f"Initializing vector store (hard_init={hard_init})")
         if self.vector_store:
+            logger.info("Vector store already initialized, skipping")
             return
         self.vector_store = QdrantDBClient()
         
         if hard_init:
+            logger.info("Hard reset requested – clearing vector store")
             await self.vector_store.reset()
-            logger.success("Векторное хранилище полностью очищено")
             
         if not await self.vector_store.has_collection(settings.COLLECTION_NAME):
+            logger.info(f"Collection '{settings.COLLECTION_NAME}' does not exist, adding documents from {settings.DATA_DIR}")
             await self.add_docs_in_vector_store(settings.DATA_DIR)
-            logger.success("В векторное хранилище загружены документы")
+        else:
+            logger.info(f"Collection '{settings.COLLECTION_NAME}' already exists")
     
     async def add_docs_in_vector_store(self, folder: Path, extensions: List = ['.pdf']) -> None:
+        logger.info(f"Starting document ingestion from {folder} with extensions {extensions}")
         if not folder.exists():
             raise FileNotFoundError(f"Папка не найдена: {folder}")    
         if not folder.is_dir():
@@ -63,10 +68,12 @@ class RagService:
                     logger.info(f"Обработан файл {file_path}, создано {len(chunks)} чанков.")
                     
                 except Exception as e:
-                    print(f"Ошибка при обработке файла {file_path}: {e}")
+                    logger.error(f"Ошибка при обработке файла {file_path}: {e}")
                     continue
+        logger.info("Document ingestion completed")
                 
     async def get_relevant_docs(self, query: str, limit: int = 3) -> Tuple[str, List[Dict[str, str]]]:
+        logger.info(f"Retrieving relevant documents for query: '{query}', limit={limit}")
         vector = await self.embedder.embed_query(query)
         
         search_result = await self.vector_store.search(
@@ -76,8 +83,11 @@ class RagService:
         )
         
         if not search_result:
+            logger.info("No relevant documents found")
             return "", []
         
+        logger.info(f"Found {len(search_result.documents)} relevant documents")
+
         formatted_texts = []
         docs = []
         
@@ -92,6 +102,7 @@ class RagService:
                 "doc_title": title,
             })
         
+        logger.debug("Formatted document chunks for response")
         return "\n---\n".join(formatted_texts), docs
                 
     async def _create_vector_items(self, file_path: Path, chunks: List[str]) -> List[VectorItem]:
@@ -116,5 +127,4 @@ class RagService:
             )
             for id in range(total_chunks)
         ]
-        
         
