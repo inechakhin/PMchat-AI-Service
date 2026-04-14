@@ -3,7 +3,8 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
 from core.app_state import state
-from models.ollama import ChatOllama
+from core.config import settings
+from models.factory import LLM, Embedder
 from services.ai_service import AiService
 from services.rag_service import RagService
 from routers.ai_router import ai_router
@@ -11,15 +12,16 @@ from utils.logging import logger
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    ollama = ChatOllama()
-    await ollama.pull_model()
-    state.ollama = ollama
+    llm = await LLM.get_llm(settings.LLM_PROVIDER)
+    state.llm = llm
+    embedder = await Embedder.get_embedder(settings.EMBEDDER_PROVIDER)
+    state.embedder = embedder
     
-    rag_service = RagService(ollama)
+    rag_service = RagService(embedder)
     await rag_service.init_vector_store()
     state.rag_service = rag_service
-    
-    state.ai_service = AiService(ollama, rag_service)
+
+    state.ai_service = AiService(llm, rag_service)
 
     yield
 

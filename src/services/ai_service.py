@@ -2,7 +2,7 @@ import asyncio
 import json
 from typing import AsyncGenerator, Tuple, List, Dict, Any
 
-from models.ollama import ChatOllama
+from models.base import ChatBase
 from schemas.ai import AiRequest, AiMessage, AiAttachment, AiResponse
 from core.llm_tools import TOOLS
 from core.prompts import SYSTEM_PROMPT, CHAT_TITLE_PROMPT
@@ -13,7 +13,7 @@ class AiService:
     
     def __init__(
         self, 
-        llm: ChatOllama,
+        llm: ChatBase,
         rag: RagService,
     ):
         self.llm = llm

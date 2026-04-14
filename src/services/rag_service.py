@@ -3,7 +3,7 @@ from typing import List, Tuple, Dict
 import uuid
 from markitdown import MarkItDown
 
-from models.ollama import ChatOllama
+from models.base import ChatBase
 from db.qdrant import QdrantDBClient
 from schemas.vector import VectorItem
 from core.config import settings
@@ -14,7 +14,7 @@ class RagService:
 
     def __init__(
         self,
-        embedder: ChatOllama,
+        embedder: ChatBase,
     ):        
         self.embedder = embedder
         self.md = MarkItDown(enable_plugins=False)
@@ -37,7 +37,7 @@ class RagService:
         else:
             logger.info(f"Collection '{settings.COLLECTION_NAME}' already exists")
     
-    async def add_docs_in_vector_store(self, folder: Path, extensions: List = ['.pdf']) -> None:
+    async def add_docs_in_vector_store(self, folder: Path, extensions: List = [".pdf", ".docx"]) -> None:
         logger.info(f"Starting document ingestion from {folder} with extensions {extensions}")
         if not folder.exists():
             raise FileNotFoundError(f"Папка не найдена: {folder}")    

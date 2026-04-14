@@ -3,10 +3,11 @@ import json
 from typing import AsyncGenerator, Dict, Any, List, Optional
 from ollama import AsyncClient, ResponseError
 
+from models.base import ChatBase
 from core.config import settings
 from utils.logging import logger
 
-class ChatOllama:
+class ChatOllama(ChatBase):
     
     def __init__(
         self,
@@ -27,8 +28,12 @@ class ChatOllama:
             timeout=timeout,
         )
 
-    async def pull_model(self, retries: int = 30, delay: float = 2.0) -> None:
-        # ensure_ready
+    async def pull_model(
+        self,
+        model: str,
+        retries: int = 30,
+        delay: float = 2.0,
+    ):
         for _ in range(retries):
             try:
                 await self.client.list()
@@ -39,25 +44,16 @@ class ChatOllama:
                 await asyncio.sleep(delay)
         else:
             raise RuntimeError("Ollama API not available")
-
-        # pull_model
+        
         models = await self.client.list()
         model_names = {m.model for m in models.models}
-
-        if self.model not in model_names:
-            logger.info(f"Pulling Ollama model: {self.model}")
-            await self.client.pull(self.model)
+        if model not in model_names:
+            logger.info(f"Pulling Ollama model: {model}")
+            await self.client.pull(model)
             logger.info("Model pulled successfully")
         else:
-            logger.info(f"Model {self.model} already exists")
+            logger.info(f"Model {model} already exists")
         
-        if self.embedder and self.embedder != self.model:
-            if self.embedder not in model_names:
-                logger.info(f"Pulling Ollama embedder model: {self.embedder}")
-                await self.client.pull(self.embedder)
-                logger.info("Embedder model pulled successfully")
-            else:
-                logger.info(f"Embedder model {self.embedder} already exists")
 
     async def stream(
         self, 
