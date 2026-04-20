@@ -3,6 +3,7 @@ from typing import List
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from entities.enums.document_type import DocumentType
 from core.config import settings
 from utils.logging import logger
 
@@ -35,3 +36,12 @@ def split_text_into_chunks(text: str) -> List[str]:
     
     chunks = text_splitter.split_text(text)
     return chunks
+
+
+def get_document_type(file_path: Path) -> str:    
+    filename_lower = file_path.name.lower()
+    if filename_lower.startswith("техническое задание на разработку"):
+        return DocumentType.TECHNICAL_SPEC.value
+    elif filename_lower.startswith("техническое задание на внедрение"):
+        return DocumentType.IMPLEMENT_TECH_SPEC.value
+    return DocumentType.UNKNOWN.value

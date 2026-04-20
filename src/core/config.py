@@ -11,7 +11,7 @@ class Config(BaseSettings):
     DATA_MD_DIR: Path = BASE_DIR / "data_md"
     
     # Providers
-    LLM_PROVIDER: str = "yandex"
+    LLM_PROVIDER: str = "ollama"
     EMBEDDER_PROVIDER: str = "ollama"
     
     # Ollama
@@ -40,7 +40,8 @@ class Config(BaseSettings):
     CHUNK_OVERLAP: int = 256
     
     # RAG Service
-    COLLECTION_NAME: str = Field("project_docs", env = "COLLECTION_NAME")
+    HEADERS_COLLECTION: str = "doc_headers"
+    CHUNKS_COLLECTION: str = "doc_chunks"   
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
