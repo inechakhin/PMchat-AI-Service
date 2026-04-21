@@ -9,7 +9,8 @@ class VectorItem(BaseModel):
 
 class GetResult(BaseModel):
     ids: Optional[List[str]]
-    documents: Optional[List[str]]
+    texts: Optional[List[str]]
+    vectors: Optional[List[List[float | int]]]
     metadatas: Optional[List[Any]]
 
 class SearchResult(GetResult):
