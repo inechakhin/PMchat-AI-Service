@@ -9,6 +9,8 @@ class Config(BaseSettings):
     LOGS_DIR: Path = BASE_DIR / "logs"
     DATA_DIR: Path = BASE_DIR / "data"
     DATA_MD_DIR: Path = BASE_DIR / "data_md"
+    TEMPLATES_DIR: Path = DATA_DIR / "templates"
+    DOCS_DIR: Path = DATA_DIR / "docs"
     
     # Providers
     LLM_PROVIDER: str = "ollama"

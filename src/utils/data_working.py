@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List
+from typing import List, AsyncGenerator
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -36,6 +36,22 @@ def split_text_into_chunks(text: str) -> List[str]:
     
     chunks = text_splitter.split_text(text)
     return chunks
+
+
+async def get_files_by_ext(
+    folder: Path, 
+    extensions: List = [".pdf", ".docx"],
+) -> AsyncGenerator[Path, None]:
+    if not folder.exists():
+        raise FileNotFoundError(f"Папка не найдена: {folder}")    
+    if not folder.is_dir():
+        raise NotADirectoryError(f"Указанный путь не является папкой: {folder}")
+    
+    for ext in extensions:
+        clean_ext = ext[1:] if ext.startswith('.') else ext
+        pattern = f"*.{clean_ext}"
+        for file_path in folder.glob(pattern):
+            yield file_path
 
 
 def get_document_type(file_path: Path) -> str:    

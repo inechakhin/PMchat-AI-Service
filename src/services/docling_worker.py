@@ -9,6 +9,7 @@ from docling.datamodel.base_models import InputFormat
 from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling_core.types.doc import DocItemLabel
 
+from entities.section import Section
 from schemas.docling import HeaderMeta, ChunkMeta
 from utils.data_working import get_document_type
 from utils.logging import logger
@@ -82,3 +83,49 @@ class DoclingWorker:
             )
         
         logger.info(f"DoclingWorker: завершена обработка {file_path.name}")
+        
+    async def process_template_document(
+        self, 
+        file_path: Path
+    ) -> AsyncGenerator[Section, None]:
+        logger.info(f"DoclingWorker: начало потокового парсинга {file_path.name}")
+
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, lambda: self.converter.convert(file_path))
+        docling_doc = result.document
+
+        current_root: Section = None
+        stack: list[tuple[int, Section]] = []
+        
+        min_header_level = None
+
+        for item, level in docling_doc.iterate_items():
+            if item.label == DocItemLabel.SECTION_HEADER:
+                if min_header_level is None:
+                    min_header_level = level
+
+                new_section = Section(title=item.text, text="", children=[])
+
+                if level == min_header_level:
+                    if current_root:
+                        yield current_root
+                    current_root = new_section
+                    stack = [(level, current_root)]
+                else:
+                    while stack and stack[-1][0] >= level:
+                        stack.pop()
+                    if stack:
+                        stack[-1][1].children.append(new_section)
+                    stack.append((level, new_section))
+
+            elif item.label == DocItemLabel.TEXT:
+                current_section = stack[-1][1]
+                if current_section.text:
+                    current_section.text += "\n\n" + item.text
+                else:
+                    current_section.text = item.text
+
+        if current_root:
+            yield current_root
+
+        logger.info("DoclingWorker: потоковый парсинг завершен")
