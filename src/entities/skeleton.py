@@ -3,12 +3,14 @@ from pydantic import Field
 from datetime import datetime
 from typing import List, Optional
 
-from enums.document_type import DocumentType
+from entities.enums.document_type import DocumentType
+from entities.enums.chat_state import ChatState
 from section import Section
 
 class Skeleton(Document):
 
     chat_id: str = Indexed(unique=True)
+    state: ChatState = Field(default=ChatState.ELICITATION)
     type: Optional[DocumentType] = Indexed()
     custom_type_name: Optional[str] = Field(default=None)
     requirements: str = Field(default="")
@@ -33,4 +35,4 @@ class Skeleton(Document):
         return data
 
     def __repr__(self):
-        return f"Skeleton(id={self.id}, chat_id={self.chat_id}, type={self.type.value})"
+        return f"Skeleton(id={self.id}, chat_id={self.chat_id}, state={self.state}, type={self.type.value})"

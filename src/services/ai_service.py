@@ -1,24 +1,109 @@
 import asyncio
 import json
-from typing import AsyncGenerator, Tuple, List, Dict, Any
+from typing import AsyncGenerator, Tuple, List, Dict, Any, Optional
 
+from entities.enums.document_type import DocumentType
+from entities.enums.chat_state import ChatState
+from entities.section import Section
 from models.base import ChatBase
+from repositories.skeleton_repository import SkeletonRepository
 from schemas.ai import AiRequest, AiMessage, AiAttachment, AiResponse
-from core.llm_tools import TOOLS
-from core.prompts import SYSTEM_PROMPT, CHAT_TITLE_PROMPT
+from core.llm_tools import (
+    ELICITATION_TOOLS,
+    REVISION_TOOLS,
+    
+    TOOLS,
+)
+from core.prompts import (
+    ELICITATION_PROMPT,
+    REVISION_PROMPT,
+    GENERATING_PROMPT,
+    REGENERATING_PROMPT,
+    DESCRIPTION_PROMPT,
+    
+    SYSTEM_PROMPT,
+    CHAT_TITLE_PROMPT,
+)
 from services.rag_service import RagService
+from services.template_service import TemplateService
 from utils.logging import logger
 
 class AiService:
     
     def __init__(
         self, 
+        skeleton_repository: SkeletonRepository,
+        template_service: TemplateService,
         llm: ChatBase,
         rag: RagService,
     ):
+        self.skeleton_repository = skeleton_repository
+        self.template_service = template_service
         self.llm = llm
         self.rag = rag
-        self.tools = TOOLS
+    
+    async def generate_document(self, request: AiRequest) -> AsyncGenerator[AiResponse, None]:
+        logger.info("Starting generate_document")
+        try:
+            if len(request.messages) == 1:
+                await self.skeleton_repository.create_empty(request.chat_id)
+                chat_title = await self._generate_chat_title(request)
+                yield AiResponse(chat_title=chat_title).model_dump_json() + "\n"
+            
+            metadata = await self.skeleton_repository.get_metadata_by_chat_id(request.chat_id)
+            state = metadata.get("state")
+            if state == ChatState.ELICITATION:
+                prompt = ELICITATION_PROMPT.format(
+                    doc_types_list="\n".join(
+                        f"- {t.value}"
+                        for t in DocumentType if t != DocumentType.UNKNOWN
+                    )
+                )
+                tools = ELICITATION_TOOLS
+            elif state == ChatState.REVISION:
+                doc_type = metadata.get("type")
+                custom_type_name = metadata.get("custom_type_name")
+                requirements = metadata.get("requirements")
+                
+                prompt = REVISION_PROMPT.format(
+                    document_type=doc_type.value if doc_type != DocumentType.UNKNOWN else custom_type_name,
+                    requirements=requirements,
+                )
+                tools = REVISION_TOOLS
+            else:
+                logger.error(f"Unexpected state: {state} for chat {request.chat_id}")
+                yield AiResponse(
+                    is_error=True,
+                    error_message=f"Unexpected state: {state} for chat {request.chat_id}",
+                ).model_dump_json() + "\n"
+        
+            llm_messages = self._build_llm_messages(prompt, request.messages)
+            response = await self.llm.invoke(llm_messages, tools=tools)
+            
+            llm_messages = await self._handle_tool_calls(request.chat_id, llm_messages, response)
+                    
+            async for token in self.llm.stream(llm_messages):
+                if token:
+                    yield AiResponse(token=token).model_dump_json() + "\n"
+        
+            yield AiResponse(is_end=True).model_dump_json() + "\n"
+        
+        except asyncio.CancelledError:
+            logger.info("Generation cancelled by user")
+            yield AiResponse(is_end=True).model_dump_json() + "\n"
+        except ConnectionError as e:
+            logger.error(f"Ollama connection failed: {e}")
+            yield AiResponse(
+                is_error=True,
+                error_message=f"Ollama service unavailable: {str(e)}",
+            ).model_dump_json() + "\n"
+        except Exception as e:
+            logger.error(f"AI generation failed: {e}")
+            yield AiResponse(
+                is_error=True,
+                error_message=f"Generation failed: {str(e)}",
+            ).model_dump_json() + "\n"
+            
     
     async def generate_response(self, request: AiRequest) -> AsyncGenerator[AiResponse, None]:
         logger.info("Starting response generation for messages")
@@ -26,7 +111,7 @@ class AiService:
             llm_messages = self._build_llm_messages(SYSTEM_PROMPT, request.messages)
             
             logger.info("Invoking LLM with tools")
-            response = await self.llm.invoke(llm_messages, tools=self.tools)
+            response = await self.llm.invoke(llm_messages, tools=TOOLS)
             
             logger.info("Checking for tool calls in LLM response")
             llm_messages, docs = await self._handle_tool_calls(llm_messages, response)
@@ -90,7 +175,8 @@ class AiService:
         return llm_messages
     
     async def _handle_tool_calls(
-        self, 
+        self,
+        chat_id: str,
         llm_messages: List[Dict[str, str]], 
         response: Dict[str, Any],
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, str]]]:
@@ -103,13 +189,59 @@ class AiService:
         
         logger.info("Processing tool call(s)")
         for tool_call in tool_calls:
-            llm_messages.append({
-                "role": "assistant",
-                "content": "",
-                "function_call": tool_call["function"],
-            })
+            func_name = tool_call["function"]["name"]
             
-            if tool_call["function"]["name"] == "search_project_docs":
+            if func_name == "finalize_requirements":
+                doc_type_str = tool_call["function"]["arguments"]["doc_type"]
+                custom_type_name = tool_call["function"]["arguments"].get("custom_type_name")
+                requirements = tool_call["function"]["arguments"]["requirements"]
+
+                await self._init_document_skeleton(chat_id, doc_type_str, custom_type_name, requirements)
+                
+                retelling = await self._generate_full_document(chat_id, doc_type_str, requirements)
+
+                # convert document to docx
+                
+                llm_messages[0]["content"] = DESCRIPTION_PROMPT
+                llm_messages.append({
+                    "role": "tool",
+                    "name": func_name,
+                    "content": json.dumps({
+                        "status": "success", 
+                        "message": "Документ сгенерирован.",
+                        "retelling": retelling,
+                    }, ensure_ascii=False)
+                })
+                await self.skeleton_repository.update(chat_id, {"state": ChatState.REVISION})
+            
+            elif func_name == "finalize_comments":
+                section_title = tool_call["function"]["arguments"]["section_title"]
+                comments = tool_call["function"]["arguments"]["comments"]
+                
+                new_section_text = await self._regenerate_section(chat_id, section_title, comments)
+                
+                if new_section_text:
+                    # convert document to docx
+                    
+                    tool_content = {
+                        "status": "success", 
+                        "message": f"Раздел '{section_title}' успешно переписан.",
+                        "new_content": new_section_text
+                    }
+                else:
+                    tool_content = {
+                        "status": "error", 
+                        "message": "Раздел не найден."
+                    }
+                
+                llm_messages[0]["content"] = DESCRIPTION_PROMPT
+                llm_messages.append({
+                    "role": "tool",
+                    "name": func_name,
+                    "content": json.dumps(tool_content, ensure_ascii=False)
+                })
+        
+            elif func_name == "search_project_docs":
                 query = tool_call["function"]["arguments"]["query"]
                 top_k = tool_call["function"]["arguments"]["top_k"]
                 
@@ -117,12 +249,148 @@ class AiService:
                 
                 llm_messages.append({
                     "role": "tool",
-                    "name": "search_project_docs",
+                    "name": func_name,
                     "content": json.dumps({"retrieved_docs": tool_response}, ensure_ascii=False),
                 })
         
         return llm_messages, docs
+
+    async def _init_document_skeleton(
+        self,
+        chat_id: str,
+        doc_type_str: str,
+        custom_type_name: str,
+        requirements: str,
+    ) -> None:
+        try:
+            doc_type = DocumentType(doc_type_str)
+        except ValueError:
+            doc_type = DocumentType.UNKNOWN
+            custom_type_name = doc_type_str
+        
+        update_data = {
+            "type": doc_type,
+            "custom_type_name": custom_type_name,
+            "requirements": requirements,
+        }
+        
+        await self.skeleton_repository.update(chat_id, update_data)
+        
+        if doc_type == DocumentType.UNKNOWN:
+            async for section in self.template_service.generate_template(custom_type_name, requirements):
+                await self.skeleton_repository.add_section(chat_id, section)
+        else:
+            async for section in self.template_service.get_template(doc_type):
+                await self.skeleton_repository.add_section(chat_id, section)
+
+    async def _generate_full_document(
+        self, 
+        chat_id: str,
+        doc_type_str: str, 
+        requirements: str
+    ) -> str:
+        total_sections = await self.skeleton_repository.get_total_sections_count(chat_id)
+        logger.info(f"Начинаем полную генерацию документа. Разделов: {total_sections}")
+        
+        previous_context = ""
+        combined_top_level_text = []
+
+        async def process_section(sec: Section, prev_ctx: str) -> Tuple[Section, str]:
+            logger.info(f"Генерация раздела: {sec.title}")
+            
+            rag_context = await self.rag.search_with_boosting(doc_type_str, sec.title, sec.text)
+            
+            prompt = GENERATING_PROMPT.format(
+                section_title=sec.title,
+                document_type=doc_type_str,
+                requirements=requirements,
+                previous_context=prev_ctx or "Это первый раздел документа.",
+                rag_context=rag_context or "Нет данных в базе."
+            )
+
+            response = await self.llm.invoke([{"role": "user", "content": prompt}])
+            generated_text = response["message"].get("content")
+            
+            sec.text = generated_text
+            new_prev_ctx = generated_text[-500:] if generated_text else prev_ctx
+
+            if sec.children:
+                populated_children = []
+                for child in sec.children:
+                    populated_child, new_prev_ctx = await process_section(child, new_prev_ctx)
+                    populated_children.append(populated_child)
+                sec.children = populated_children
+
+            return sec, new_prev_ctx
+
+        for index in range(total_sections):
+            section = await self.skeleton_repository.get_section_model(chat_id, index)
+            if not section:
+                continue
+                
+            populated_section, previous_context = await process_section(section, previous_context)
+            await self.skeleton_repository.update_section(chat_id, index, populated_section)
+        
+            combined_top_level_text.append(f"**{populated_section.title}**\n{populated_section.text}")
+
+        return "\n\n".join(combined_top_level_text)
+
     
+    async def _regenerate_section(
+        self,
+        chat_id: str,
+        section_title: str,
+        comments: str
+    ) -> str:
+        total_sections = await self.skeleton_repository.get_total_sections_count(chat_id)
+        
+        target_root_index = -1
+        target_section = None
+        root_section = None
+
+        def find_in_tree(node: Section, target: str) -> Optional[Section]:
+            if node.title == target:
+                return node
+            for child in node.children:
+                found = find_in_tree(child, target)
+                if found:
+                    return found
+            return None
+
+        for index in range(total_sections):
+            root_section = await self.skeleton_repository.get_section_model(chat_id, index)
+            if not root_section:
+                continue
+                
+            target_section = find_in_tree(root_section, section_title)
+            if target_section:
+                target_root_index = index
+                break
+                
+        if target_root_index == -1 or not target_section:
+            logger.error(f"Раздел '{section_title}' не найден в скелете.")
+            return ""
+
+        logger.info(f"Регенерация раздела: {section_title}")
+
+        rag_context = await self.rag.search_with_boosting("", section_title, comments)
+
+        prompt = REGENERATING_PROMPT.format(
+            section_title=section_title,
+            old_text=target_section.text,
+            comments=comments,
+            rag_context=rag_context or "Новых данных не найдено."
+        )
+
+        response = await self.llm.invoke([{"role": "user", "content": prompt}])
+        new_text = response.get("message", {}).get("content", "")
+
+        target_section.text = new_text
+
+        await self.skeleton_repository.update_section(chat_id, target_root_index, root_section)
+        
+        return new_text
+
     def _build_attachments(
         self,
         docs: List[Dict[str, Any]],
@@ -133,3 +401,4 @@ class AiService:
             )
             for doc in docs
         ]
+        
