@@ -77,14 +77,17 @@ class TemplateRepository:
         ]).to_list()
         return res[0].get("count", 0) if res else 0
 
-    async def get_template_section(
+    async def get_section_model(
         self,
         doc_type: DocumentType,
         section_index: int,
-    ) -> Optional[dict]:
+    ) -> Optional[Section]:
         template = await Template.find_one(
            Template.type == doc_type
         ).project({
             "sections": {"$slice": [section_index, 1]}
         })
-        return template.sections[0] if template and template.sections else None
+        section_dict = template.sections[0] if template and template.sections else None
+        if section_dict:
+            return Section.model_validate(section_dict)
+        return None

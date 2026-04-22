@@ -3,7 +3,7 @@ from pydantic import Field
 from datetime import datetime
 from typing import List
 
-from enums.document_type import DocumentType
+from entities.enums.document_type import DocumentType
 from section import Section
 
 class Template(Document):

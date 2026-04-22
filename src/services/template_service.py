@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from pydantic import TypeAdapter, ValidationError
-from typing import List, Dict, Any
+from typing import AsyncGenerator, List, Dict, Any
 
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics.pairwise import cosine_distances
@@ -13,7 +13,7 @@ from models.base import ChatBase
 from repositories.template_repository import TemplateRepository
 from services.docling_worker import DoclingWorker
 from core.config import settings
-from core.prompts import TEMPLATE_BUILDER_PROMPT
+from core.prompts import TEMPLATE_GENERATING_PROMPT, TEMPLATE_BUILDER_PROMPT
 from utils.data_working import get_files_by_ext, get_document_type
 from utils.logging import logger
 
@@ -41,15 +41,49 @@ class TemplateService:
                 if await self.template_repository.exist_by_type(doc_type):
                     await self.template_repository.delete_by_type(doc_type)
         
-        await self.create_templates_from_files(settings.TEMPLATES_DIR)
+        await self._create_templates_from_files(settings.TEMPLATES_DIR)
         for doc_type in DocumentType:
             if (doc_type == DocumentType.UNKNOWN or
                 await self.template_repository.exist_by_type(doc_type)):
                 return
-            await self.build_template(doc_type)
+            await self._build_template(doc_type)
 
-    async def create_templates_from_files(self, folder: Path, extensions: List = [".docx"]):
+    async def get_template(self, doc_type: DocumentType) -> AsyncGenerator[Section, None]:
+        logger.info(f"Возврщаем шаблон для типа: {doc_type.value}")
+       
+        total = await self.template_repository.get_total_sections_count(doc_type)
+        if total == 0:
+            logger.warning(f"Шаблон для типа {doc_type.value} пуст или не найден")
+            return
+        
+        for idx in range(total):
+            section = await self.template_repository.get_section_model(doc_type, idx)
+            if section:
+                yield section
+
+    async def generate_template(self, custom_type_name: str, requirements: str) -> AsyncGenerator[Section, None]:
+        logger.info(f"Генерация шаблона для типа: {custom_type_name}")
+
+        request = [
+            {
+                "role": "system",
+                "content": TEMPLATE_GENERATING_PROMPT.format(
+                    doc_type=custom_type_name,
+                    requirements=requirements,
+                ),
+            }
+        ]
+
+        response = await self.llm.invoke(request)
+        response_text = response["message"].get("content")
+        sections = self._parse_llm_response(response_text)
+
+        for section in sections:
+            yield section
+
+    async def _create_templates_from_files(self, folder: Path, extensions: List = [".docx"]):
         logger.info("Создание шаблонов на основе существующих файлов")
+        
         async for file_path in get_files_by_ext(folder, extensions):
             doc_type = get_document_type(file_path)      
             if await self.template_repository.exist_by_type(doc_type):
@@ -64,7 +98,7 @@ class TemplateService:
 
             logger.info(f"Шаблон для {doc_type} был загружен в базу")
 
-    async def build_template(self, doc_type: DocumentType, distance_threshold: float = 0.3):
+    async def _build_template(self, doc_type: DocumentType, distance_threshold: float = 0.3):
         logger.info(f"Начало сборки шаблона через кластеризацию для: {doc_type.value}")
         
         headers_get_result = await self.vector_store.query(
@@ -127,7 +161,8 @@ class TemplateService:
             }
         ]
         
-        response_text = await self.llm.invoke(request)
+        response = await self.llm.invoke(request)
+        response_text = response["message"].get("content")
         return self._parse_llm_response(response_text)
     
     def _parse_llm_response(self, response_text: str) -> List[Section]:
