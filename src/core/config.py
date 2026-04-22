@@ -43,7 +43,10 @@ class Config(BaseSettings):
     
     # RAG Service
     HEADERS_COLLECTION: str = "doc_headers"
-    CHUNKS_COLLECTION: str = "doc_chunks"   
+    CHUNKS_COLLECTION: str = "doc_chunks"
+    
+    TYPE_BOOST: float = 0.15
+    HEADING_BOOST: float = 0.20
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",

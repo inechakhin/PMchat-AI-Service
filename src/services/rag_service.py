@@ -81,7 +81,70 @@ class RagService:
                 logger.error(f"Ошибка при обработке файла {file_path}: {e}")
                 continue
         logger.info("Индексация документов завершена")
-       
+
+    async def search_with_boosting(
+        self,
+        doc_type: str,
+        section_title: str,
+        requirements: str,
+        limit: int = 5,
+    ) -> str:
+        logger.info(f"Поиск с бустингом: doc_type='{doc_type}', section_title='{section_title}'")
+        
+        chunk_vector = await self.embedder.embed_query(requirements)
+        chunks_result = await self.vector_store.search(
+            collection_name=settings.CHUNKS_COLLECTION,
+            vector=chunk_vector,
+            limit=limit * 3,
+        )
+        if not chunks_result or not chunks_result.texts:
+            logger.info("Релевантные чанки не найдены")
+            return ""
+        logger.debug(f"Получено {len(chunks_result.texts)} чанков для бустинга")
+
+        header_vector = await self.embedder.embed_query(section_title)
+        headers_result = await self.vector_store.search(
+            collection_name=settings.HEADERS_COLLECTION,
+            vector=header_vector,
+            limit=limit,
+        )
+        header_ids = set()
+        if headers_result and headers_result.ids:
+            header_ids = set(headers_result.ids)
+            logger.debug(f"Найдено {len(header_ids)} релевантных заголовков")
+        else:
+            logger.debug("Релевантные заголовки не найдены")
+
+        boosted_items = []
+        for text, metadata, distance in zip(
+            chunks_result.texts,
+            chunks_result.metadatas,
+            chunks_result.distances,
+        ):
+            boosted_score = distance
+
+            if metadata.get("doc_type") == doc_type:
+                boosted_score += settings.TYPE_BOOST
+
+            heading_values = set(metadata.get("headings", {}).values())
+            if heading_values.intersection(header_ids):
+                boosted_score += settings.HEADING_BOOST
+
+            boosted_score = min(boosted_score, 1.0)
+
+            boosted_items.append({
+                "text": text,
+                "metadata": metadata,
+                "boosted_score": boosted_score,
+                "original_distance": distance,
+            })
+
+        boosted_items.sort(key=lambda x: x["boosted_score"], reverse=True)
+        final_results = [item["text"] for item in boosted_items[:limit]]
+        
+        logger.info(f"Возвращено {len(final_results)} чанков после бустинга")
+        return "\n---\n".join(final_results)
+    
     async def get_relevant_docs(self, query: str, limit: int = 3) -> Tuple[str, List[Dict[str, str]]]:
         logger.info(f"Поиск релевантных документов по запросу: '{query}', лимит={limit}")
         vector = await self.embedder.embed_query(query)
