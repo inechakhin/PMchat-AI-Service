@@ -8,10 +8,11 @@ class SkeletonRepository:
     async def create_empty(
         self,
         chat_id: str,
+        state: ChatState,
     ) -> None:
         skeleton = Skeleton(
             chat_id=chat_id,
-            state=ChatState.ELICITATION
+            state=state,
         )
         return await skeleton.insert()
     

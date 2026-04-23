@@ -12,6 +12,14 @@ class Config(BaseSettings):
     TEMPLATES_DIR: Path = DATA_DIR / "templates"
     DOCS_DIR: Path = DATA_DIR / "docs"
     
+    # S3
+    S3_HOST: str = Field("localhost", env="S3_HOST")
+    S3_PORT: int = Field("9000", env="S3_PORT")
+    S3_ACCESS_KEY: str = Field("minioadmin", env="S3_ACCESS_KEY")
+    S3_SECRET_KEY: str = Field("minioadmin", env="S3_SECRET_KEY")
+    S3_BUCKET_NAME: str = Field("pmchat-documents", env="S3_BUCKET_NAME")
+    S3_SECURE: bool = Field(False, env="S3_SECURE")
+    
     # Providers
     LLM_PROVIDER: str = "ollama"
     EMBEDDER_PROVIDER: str = "ollama"

@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 import json
 from typing import AsyncGenerator, Tuple, List, Dict, Any, Optional
 
@@ -7,24 +8,30 @@ from entities.enums.chat_state import ChatState
 from entities.section import Section
 from models.base import ChatBase
 from repositories.skeleton_repository import SkeletonRepository
-from schemas.ai import AiRequest, AiMessage, AiAttachment, AiResponse
+from schemas.ai import (
+    AiRequest,
+    AiMessage,
+    AiSource,
+    AiAttachment,
+    AiResponse,
+)
 from core.llm_tools import (
+    COMMUNICATION_TOOLS,
     ELICITATION_TOOLS,
     REVISION_TOOLS,
-    
-    TOOLS,
 )
 from core.prompts import (
+    CHAT_TITLE_PROMPT,
+    COMMUNICATION_PROMPT,
     ELICITATION_PROMPT,
     REVISION_PROMPT,
     GENERATING_PROMPT,
     REGENERATING_PROMPT,
     DESCRIPTION_PROMPT,
-    
-    SYSTEM_PROMPT,
-    CHAT_TITLE_PROMPT,
 )
+from services.document_exporter import DocumentExporter
 from services.rag_service import RagService
+from services.s3_client import S3Client
 from services.template_service import TemplateService
 from utils.logging import logger
 
@@ -36,23 +43,39 @@ class AiService:
         template_service: TemplateService,
         llm: ChatBase,
         rag: RagService,
+        doc_exporter: DocumentExporter,
+        s3_client: S3Client,
     ):
         self.skeleton_repository = skeleton_repository
         self.template_service = template_service
         self.llm = llm
         self.rag = rag
+        self.doc_exporter = doc_exporter
+        self.s3_client = s3_client
     
-    async def generate_document(self, request: AiRequest) -> AsyncGenerator[AiResponse, None]:
-        logger.info("Starting generate_document")
+    async def generate_response(self, request: AiRequest) -> AsyncGenerator[AiResponse, None]:
+        logger.info("Starting response generation for messages")
         try:
             if len(request.messages) == 1:
-                await self.skeleton_repository.create_empty(request.chat_id)
+                if request.chat_type == "communication":
+                    await self.skeleton_repository.create_empty(request.chat_id, ChatState.COMMUNICATION)
+                elif request.chat_type == "generation":
+                    await self.skeleton_repository.create_empty(request.chat_id, ChatState.ELICITATION)
+                else:
+                    logger.error(f"Unexpected type: {request.chat_type} for chat {request.chat_id}")
+                    yield AiResponse(
+                        is_error=True,
+                        error_message=f"Unexpected type: {request.chat_type} for chat {request.chat_id}",
+                    ).model_dump_json() + "\n"
                 chat_title = await self._generate_chat_title(request)
                 yield AiResponse(chat_title=chat_title).model_dump_json() + "\n"
             
             metadata = await self.skeleton_repository.get_metadata_by_chat_id(request.chat_id)
             state = metadata.get("state")
-            if state == ChatState.ELICITATION:
+            if state == ChatState.COMMUNICATION:
+                prompt = COMMUNICATION_PROMPT
+                tools = COMMUNICATION_TOOLS
+            elif state == ChatState.ELICITATION:
                 prompt = ELICITATION_PROMPT.format(
                     doc_types_list="\n".join(
                         f"- {t.value}"
@@ -80,58 +103,20 @@ class AiService:
             llm_messages = self._build_llm_messages(prompt, request.messages)
             response = await self.llm.invoke(llm_messages, tools=tools)
             
-            llm_messages = await self._handle_tool_calls(request.chat_id, llm_messages, response)
+            llm_messages, attachments, sources = await self._handle_tool_calls(request.chat_id, llm_messages, response)
                     
             async for token in self.llm.stream(llm_messages):
                 if token:
                     yield AiResponse(token=token).model_dump_json() + "\n"
-        
-            yield AiResponse(is_end=True).model_dump_json() + "\n"
-        
-        except asyncio.CancelledError:
-            logger.info("Generation cancelled by user")
-            yield AiResponse(is_end=True).model_dump_json() + "\n"
-        except ConnectionError as e:
-            logger.error(f"Ollama connection failed: {e}")
-            yield AiResponse(
-                is_error=True,
-                error_message=f"Ollama service unavailable: {str(e)}",
-            ).model_dump_json() + "\n"
-        except Exception as e:
-            logger.error(f"AI generation failed: {e}")
-            yield AiResponse(
-                is_error=True,
-                error_message=f"Generation failed: {str(e)}",
-            ).model_dump_json() + "\n"
-            
-    
-    async def generate_response(self, request: AiRequest) -> AsyncGenerator[AiResponse, None]:
-        logger.info("Starting response generation for messages")
-        try:
-            llm_messages = self._build_llm_messages(SYSTEM_PROMPT, request.messages)
-            
-            logger.info("Invoking LLM with tools")
-            response = await self.llm.invoke(llm_messages, tools=TOOLS)
-            
-            logger.info("Checking for tool calls in LLM response")
-            llm_messages, docs = await self._handle_tool_calls(llm_messages, response)
 
-            logger.info("Starting token stream")
-            async for token in self.llm.stream(llm_messages):
-                if token:
-                    yield AiResponse(token=token).model_dump_json() + "\n"
-            logger.info("Token stream completed")
-            
-            yield AiResponse(attachments=self._build_attachments(docs)).model_dump_json() + "\n"
-            
-            if len(request.messages) == 1:
-                logger.info("Generating chat title for new conversation")
-                chat_title = await self._generate_chat_title(request)
-                yield AiResponse(chat_title=chat_title).model_dump_json() + "\n"
-              
+            if attachments:
+                yield AiResponse(attachments=attachments).model_dump_json() + "\n"
+        
+            if sources:
+                yield AiResponse(sources=sources).model_dump_json() + "\n"
+        
             yield AiResponse(is_end=True).model_dump_json() + "\n"
-            logger.info("Response generation finished successfully")
-            
+        
         except asyncio.CancelledError:
             logger.info("Generation cancelled by user")
             yield AiResponse(is_end=True).model_dump_json() + "\n"
@@ -177,15 +162,16 @@ class AiService:
     async def _handle_tool_calls(
         self,
         chat_id: str,
-        llm_messages: List[Dict[str, str]], 
+        llm_messages: List[Dict[str, Any]], 
         response: Dict[str, Any],
-    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, str]]]:
-        docs = []
+    ) -> Tuple[List[Dict[str, Any]], List[AiAttachment], List[AiSource]]:
+        attachments = []
+        sources = []
         
         tool_calls = response["message"].get("tool_calls")
         if not tool_calls:
             logger.info("No tool calls detected")
-            return llm_messages, docs
+            return llm_messages, attachments, sources
         
         logger.info("Processing tool call(s)")
         for tool_call in tool_calls:
@@ -200,7 +186,9 @@ class AiService:
                 
                 retelling = await self._generate_full_document(chat_id, doc_type_str, requirements)
 
-                # convert document to docx
+                attachment = await self._export_and_upload_document(chat_id)
+                if attachment:
+                    attachments.append(attachment)
                 
                 llm_messages[0]["content"] = DESCRIPTION_PROMPT
                 llm_messages.append({
@@ -221,7 +209,9 @@ class AiService:
                 new_section_text = await self._regenerate_section(chat_id, section_title, comments)
                 
                 if new_section_text:
-                    # convert document to docx
+                    attachment = await self._export_and_upload_document(chat_id)
+                    if attachment:
+                        attachments.append(attachment)
                     
                     tool_content = {
                         "status": "success", 
@@ -246,6 +236,7 @@ class AiService:
                 top_k = tool_call["function"]["arguments"]["top_k"]
                 
                 tool_response, docs = await self.rag.get_relevant_docs(query=query, limit=top_k)
+                sources = [AiSource.model_validate(doc) for doc in docs]
                 
                 llm_messages.append({
                     "role": "tool",
@@ -253,7 +244,7 @@ class AiService:
                     "content": json.dumps({"retrieved_docs": tool_response}, ensure_ascii=False),
                 })
         
-        return llm_messages, docs
+        return llm_messages, attachments, sources
 
     async def _init_document_skeleton(
         self,
@@ -335,7 +326,6 @@ class AiService:
 
         return "\n\n".join(combined_top_level_text)
 
-    
     async def _regenerate_section(
         self,
         chat_id: str,
@@ -391,14 +381,30 @@ class AiService:
         
         return new_text
 
-    def _build_attachments(
+    async def _export_and_upload_document(
         self,
-        docs: List[Dict[str, Any]],
-    ) -> List[AiAttachment]:
-        return [
-            AiAttachment(
-                doc_title=doc["doc_title"]
-            )
-            for doc in docs
-        ]
+        chat_id: str,
+        doc_type: str
+    ) -> Optional[AiAttachment]:
+        logger.info(f"Сборка DOCX для чата {chat_id}, тип {doc_type}")
         
+        buffer = await self.doc_exporter.build_docx_iteratively(chat_id, self.skeleton_repository)
+        
+        buffer.seek(0, 2)
+        size = buffer.tell()
+        buffer.seek(0)
+        
+        file_name = f"{doc_type}_{chat_id}_{int(datetime.now().timestamp())}.docx"
+        object_key = f"documents/{chat_id}/{file_name}"
+        
+        uploaded_key = await self.s3_client.upload_fileobj(buffer, object_key)
+        if not uploaded_key:
+            logger.error("Не удалось загрузить документ в S3")
+            return None
+        
+        return AiAttachment(
+            file_name=file_name,
+            s3_key=uploaded_key,
+            size=size,
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )

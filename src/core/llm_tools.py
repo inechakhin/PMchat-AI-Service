@@ -1,4 +1,4 @@
-TOOLS = [
+COMMUNICATION_TOOLS = [
     {
         "type": "function",
         "function": {
