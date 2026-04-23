@@ -292,9 +292,10 @@ class AiService:
             rag_context = await self.rag.search_with_boosting(doc_type_str, sec.title, sec.text)
             
             prompt = GENERATING_PROMPT.format(
-                section_title=sec.title,
                 document_type=doc_type_str,
                 requirements=requirements,
+                section_title=sec.title,
+                section_requirements=sec.text,
                 previous_context=prev_ctx or "Это первый раздел документа.",
                 rag_context=rag_context or "Нет данных в базе."
             )
