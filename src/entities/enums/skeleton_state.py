@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-class ChatState(StrEnum):
+class SkeletonState(StrEnum):
     COMMUNICATION = "communication"
     ELICITATION = "elicitation"
     REVISION = "revision"

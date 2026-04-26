@@ -33,7 +33,7 @@ class TemplateService:
         self.vector_store = vector_store
         self.llm = llm
 
-    async def init_template_store(self, hard_init: bool = False):
+    async def init_template_store(self, hard_init: bool = False) -> None:
         logger.info(f"Инициализация хранилища для шаблонов (hard_init={hard_init})")
         
         if hard_init:
@@ -41,7 +41,7 @@ class TemplateService:
                 if await self.template_repository.exist_by_type(doc_type):
                     await self.template_repository.delete_by_type(doc_type)
         
-        await self._create_templates_from_files(settings.TEMPLATES_DIR)
+        await self._add_templates_from_files(settings.TEMPLATES_DIR)
         for doc_type in DocumentType:
             if (doc_type == DocumentType.UNKNOWN or
                 await self.template_repository.exist_by_type(doc_type)):
@@ -81,7 +81,7 @@ class TemplateService:
         for section in sections:
             yield section
 
-    async def _create_templates_from_files(self, folder: Path, extensions: List = [".docx"]):
+    async def _add_templates_from_files(self, folder: Path, extensions: List = [".docx"]) -> None:
         logger.info("Создание шаблонов на основе существующих файлов")
         
         async for file_path in get_files_by_ext(folder, extensions):
@@ -98,7 +98,7 @@ class TemplateService:
 
             logger.info(f"Шаблон для {doc_type} был загружен в базу")
 
-    async def _build_template(self, doc_type: DocumentType, distance_threshold: float = 0.3):
+    async def _build_template(self, doc_type: DocumentType) -> None:
         logger.info(f"Начало сборки шаблона через кластеризацию для: {doc_type.value}")
         
         headers_get_result = await self.vector_store.query(
@@ -118,7 +118,7 @@ class TemplateService:
             n_clusters=None, 
             metric='precomputed', 
             linkage='average',
-            distance_threshold=distance_threshold
+            distance_threshold=settings.DISTANCE_THRESHOLD
         )
         labels = clustering.fit_predict(dist_matrix)
 

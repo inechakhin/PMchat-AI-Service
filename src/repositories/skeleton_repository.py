@@ -1,14 +1,14 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
 
-from entities.skeleton import Skeleton, Section, ChatState
+from entities.skeleton import Skeleton, Section, SkeletonState
 
 class SkeletonRepository:
 
     async def create_empty(
         self,
         chat_id: str,
-        state: ChatState,
+        state: SkeletonState,
     ) -> None:
         skeleton = Skeleton(
             chat_id=chat_id,

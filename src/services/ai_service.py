@@ -4,7 +4,7 @@ import json
 from typing import AsyncGenerator, Tuple, List, Dict, Any, Optional
 
 from entities.enums.document_type import DocumentType
-from entities.enums.chat_state import ChatState
+from entities.enums.skeleton_state import SkeletonState
 from entities.section import Section
 from models.base import ChatBase
 from repositories.skeleton_repository import SkeletonRepository
@@ -58,9 +58,9 @@ class AiService:
         try:
             if len(request.messages) == 1:
                 if request.chat_type == "communication":
-                    await self.skeleton_repository.create_empty(request.chat_id, ChatState.COMMUNICATION)
+                    await self.skeleton_repository.create_empty(request.chat_id, SkeletonState.COMMUNICATION)
                 elif request.chat_type == "generation":
-                    await self.skeleton_repository.create_empty(request.chat_id, ChatState.ELICITATION)
+                    await self.skeleton_repository.create_empty(request.chat_id, SkeletonState.ELICITATION)
                 else:
                     logger.error(f"Unexpected type: {request.chat_type} for chat {request.chat_id}")
                     yield AiResponse(
@@ -72,10 +72,10 @@ class AiService:
             
             metadata = await self.skeleton_repository.get_metadata_by_chat_id(request.chat_id)
             state = metadata.get("state")
-            if state == ChatState.COMMUNICATION:
+            if state == SkeletonState.COMMUNICATION:
                 prompt = COMMUNICATION_PROMPT
                 tools = COMMUNICATION_TOOLS
-            elif state == ChatState.ELICITATION:
+            elif state == SkeletonState.ELICITATION:
                 prompt = ELICITATION_PROMPT.format(
                     doc_types_list="\n".join(
                         f"- {t.value}"
@@ -83,7 +83,7 @@ class AiService:
                     )
                 )
                 tools = ELICITATION_TOOLS
-            elif state == ChatState.REVISION:
+            elif state == SkeletonState.REVISION:
                 doc_type = metadata.get("type")
                 custom_type_name = metadata.get("custom_type_name")
                 requirements = metadata.get("requirements")
@@ -184,7 +184,7 @@ class AiService:
 
                 await self._init_document_skeleton(chat_id, doc_type_str, custom_type_name, requirements)
                 
-                retelling = await self._generate_full_document(chat_id, doc_type_str, requirements)
+                retelling = await self._generate_document(chat_id, doc_type_str, requirements)
 
                 attachment = await self._export_and_upload_document(chat_id)
                 if attachment:
@@ -200,7 +200,7 @@ class AiService:
                         "retelling": retelling,
                     }, ensure_ascii=False)
                 })
-                await self.skeleton_repository.update(chat_id, {"state": ChatState.REVISION})
+                await self.skeleton_repository.update(chat_id, {"state": SkeletonState.REVISION})
             
             elif func_name == "finalize_comments":
                 section_title = tool_call["function"]["arguments"]["section_title"]
@@ -274,7 +274,7 @@ class AiService:
             async for section in self.template_service.get_template(doc_type):
                 await self.skeleton_repository.add_section(chat_id, section)
 
-    async def _generate_full_document(
+    async def _generate_document(
         self, 
         chat_id: str,
         doc_type_str: str, 
@@ -289,7 +289,7 @@ class AiService:
         async def process_section(sec: Section, prev_ctx: str) -> Tuple[Section, str]:
             logger.info(f"Генерация раздела: {sec.title}")
             
-            rag_context = await self.rag.search_with_boosting(doc_type_str, sec.title, sec.text)
+            rag_context = await self.rag.search_with_boosting(sec.text, doc_type_str, sec.title)
             
             prompt = GENERATING_PROMPT.format(
                 document_type=doc_type_str,
@@ -364,7 +364,7 @@ class AiService:
 
         logger.info(f"Регенерация раздела: {section_title}")
 
-        rag_context = await self.rag.search_with_boosting("", section_title, comments)
+        rag_context = await self.rag.search_with_boosting(comments, "", section_title)
 
         prompt = REGENERATING_PROMPT.format(
             section_title=section_title,

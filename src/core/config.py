@@ -55,6 +55,9 @@ class Config(BaseSettings):
     
     TYPE_BOOST: float = 0.15
     HEADING_BOOST: float = 0.20
+    
+    # Template Service
+    DISTANCE_THRESHOLD: float = 0.3
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",

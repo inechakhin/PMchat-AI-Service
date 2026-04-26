@@ -10,10 +10,9 @@ from repositories.skeleton_repository import SkeletonRepository
 class DocumentExporter:
     
     COLORS = {
-        "base": RGBColor(0, 102, 204),    # Синий: Из RAG
-        "ai": RGBColor(128, 0, 128),      # Фиолетовый: Придумано ИИ
-        "human": RGBColor(204, 0, 0),     # Красный: Заполнить человеку
-        "default": RGBColor(0, 0, 0)      # Черный: Обычный текст
+        "base": RGBColor(0, 0, 0), # Черный
+        "ai": RGBColor(128, 128, 128), # Серый
+        "human": RGBColor(204, 0, 0), # Красный
     }
 
     async def build_docx_iteratively(self, chat_id: str, repo: SkeletonRepository) -> io.BytesIO:

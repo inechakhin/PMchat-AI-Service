@@ -4,13 +4,13 @@ from datetime import datetime
 from typing import List, Optional
 
 from entities.enums.document_type import DocumentType
-from entities.enums.chat_state import ChatState
+from entities.enums.skeleton_state import SkeletonState
 from section import Section
 
 class Skeleton(Document):
 
     chat_id: str = Indexed(unique=True)
-    state: ChatState = Field(default=ChatState.ELICITATION)
+    state: SkeletonState
     type: Optional[DocumentType] = Indexed()
     custom_type_name: Optional[str] = Field(default=None)
     requirements: str = Field(default="")

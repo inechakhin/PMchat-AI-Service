@@ -84,14 +84,14 @@ class RagService:
 
     async def search_with_boosting(
         self,
+        query: str,
         doc_type: str,
-        section_title: str,
-        requirements: str,
+        header: str,
         limit: int = 5,
     ) -> str:
-        logger.info(f"Поиск с бустингом: doc_type='{doc_type}', section_title='{section_title}'")
+        logger.info(f"Поиск с бустингом: doc_type='{doc_type}', header='{header}'")
         
-        chunk_vector = await self.embedder.embed_query(requirements)
+        chunk_vector = await self.embedder.embed_query(query)
         chunks_result = await self.vector_store.search(
             collection_name=settings.CHUNKS_COLLECTION,
             vector=chunk_vector,
@@ -102,7 +102,7 @@ class RagService:
             return ""
         logger.debug(f"Получено {len(chunks_result.texts)} чанков для бустинга")
 
-        header_vector = await self.embedder.embed_query(section_title)
+        header_vector = await self.embedder.embed_query(header)
         headers_result = await self.vector_store.search(
             collection_name=settings.HEADERS_COLLECTION,
             vector=header_vector,
