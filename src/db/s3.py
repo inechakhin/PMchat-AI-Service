@@ -21,18 +21,25 @@ class S3Client:
         self.bucket_name = bucket_name
         self.secure = secure
         self.session = aioboto3.Session()
+        self.client = None
+        
+    async def start(self):
+        self.client = await self.session.client(
+            "s3",
+            endpoint_url=self.endpoint_url,
+            aws_access_key_id=self.aws_access_key_id,
+            aws_secret_access_key=self.aws_secret_access_key,
+            use_ssl=self.secure,
+        ).__aenter__()
+
+    async def stop(self):
+        if self.client:
+            await self.client.__aexit__(None, None, None)
 
     async def create_bucket_if_not_exists(self):
         try:
-            async with self.session.client(
-                "s3",
-                endpoint_url=self.endpoint_url,
-                aws_access_key_id=self.aws_access_key_id,
-                aws_secret_access_key=self.aws_secret_access_key,
-                use_ssl=self.secure,
-            ) as s3:
-                await s3.create_bucket(Bucket=self.bucket_name)
-                print(f"Бакет '{self.bucket_name}' успешно создан.")
+            await self.client.create_bucket(Bucket=self.bucket_name)
+            print(f"Бакет '{self.bucket_name}' успешно создан.")
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code")
             if error_code in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
@@ -42,15 +49,8 @@ class S3Client:
 
     async def upload_fileobj(self, file_obj: BinaryIO, object_name: str) -> Optional[str]:
         try:
-            async with self.session.client(
-                "s3",
-                endpoint_url=self.endpoint_url,
-                aws_access_key_id=self.aws_access_key_id,
-                aws_secret_access_key=self.aws_secret_access_key,
-                use_ssl=self.secure,
-            ) as s3:
-                await s3.upload_fileobj(file_obj, self.bucket_name, object_name)
-                return object_name
+            await self.client.upload_fileobj(file_obj, self.bucket_name, object_name)
+            return object_name
         except ClientError as e:
             print(f"Ошибка загрузки файла в S3: {e}")
             return None

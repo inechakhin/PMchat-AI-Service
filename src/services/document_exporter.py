@@ -6,6 +6,7 @@ from docx.text.paragraph import Paragraph
 
 from entities.skeleton import Section
 from repositories.skeleton_repository import SkeletonRepository
+from utils.logging import logger
 
 class DocumentExporter:
     
@@ -16,6 +17,7 @@ class DocumentExporter:
     }
 
     async def build_docx_iteratively(self, chat_id: str, repo: SkeletonRepository) -> io.BytesIO:
+        logger.info(f"Создание docx файла для чата {chat_id}")
         doc = Document()
         
         style = doc.styles['Normal']
@@ -60,8 +62,6 @@ class DocumentExporter:
             if tag and tagged_text:
                 run = paragraph.add_run(tagged_text)
                 run.font.color.rgb = DocumentExporter.COLORS[tag]
-                if tag == "human":
-                    run.font.highlight_color = 7 # Желтый маркер (по желанию)
             elif untagged_text:
                 run = paragraph.add_run(untagged_text)
                 run.font.color.rgb = DocumentExporter.COLORS["default"]

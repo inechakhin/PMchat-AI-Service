@@ -12,6 +12,13 @@ class Config(BaseSettings):
     TEMPLATES_DIR: Path = DATA_DIR / "templates"
     DOCS_DIR: Path = DATA_DIR / "docs"
     
+    # MongoDB
+    MONGO_HOST: str = Field("localhost", env="MONGO_HOST")
+    MONGO_PORT: int = Field(27018, env="MONGO_PORT")
+    MONGO_USERNAME: str | None = Field(None, env="MONGO_USERNAME")
+    MONGO_PASSWORD: str | None = Field(None, env="MONGO_PASSWORD")
+    MONGO_DB: str = Field("pmchat_ai_mongo", env="MONGO_DATABASE")
+    
     # S3
     S3_HOST: str = Field("localhost", env="S3_HOST")
     S3_PORT: int = Field("9000", env="S3_PORT")

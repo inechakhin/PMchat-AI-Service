@@ -76,7 +76,7 @@ class QdrantDBClient:
             
             return self._points_to_get_result(points[0])
         except Exception as e:
-            logger.exception(f"Error querying a collection '{collection_name}': {e}")
+            logger.exception(f"Ошибочный query для коллекции '{collection_name}': {e}")
             return None
     
     async def insert(self, collection_name: str, items: List[VectorItem]) -> None:

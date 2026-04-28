@@ -24,12 +24,12 @@ class TemplateService:
     def __init__(
         self,
         template_repository: TemplateRepository,
-        docling_worker: DoclingWorker,
+        docling: DoclingWorker,
         vector_store: QdrantDBClient,
         llm: ChatBase,
     ):
         self.template_repository = template_repository
-        self.docling_worker = docling_worker
+        self.docling = docling
         self.vector_store = vector_store
         self.llm = llm
 
@@ -92,7 +92,7 @@ class TemplateService:
             await self.template_repository.create_empty(doc_type)
             logger.debug(f"Шаблон {doc_type} инициализирован в базе")
 
-            async for root_section in self.docling_worker.process_template_document(file_path):
+            async for root_section in self.docling.process_template_document(file_path):
                 await self.template_repository.add_section(doc_type, root_section)
                 logger.debug(f"Секция '{root_section.title}' добавлена в БД")
 

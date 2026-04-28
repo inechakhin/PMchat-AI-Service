@@ -1,6 +1,6 @@
 import uuid
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple
 
 from models.base import ChatBase
 from db.qdrant import QdrantDBClient
@@ -13,17 +13,18 @@ from utils.logging import logger
 
 class RagService:
     
-    def __init__(self, embedder: ChatBase):
+    def __init__(
+        self, 
+        embedder: ChatBase,
+        docling: DoclingWorker,
+        vector_store: QdrantDBClient,
+    ):
         self.embedder = embedder
-        self.docling_worker = DoclingWorker()
-        self.vector_store: Optional[QdrantDBClient] = None
+        self.docling = docling
+        self.vector_store = vector_store
 
     async def init_vector_store(self, hard_init: bool = False) -> None:
         logger.info(f"Инициализация векторного хранилища (hard_init={hard_init})")
-        if self.vector_store:
-            logger.info("Векторное хранилище уже инициализировано, пропускаем")
-            return
-        self.vector_store = QdrantDBClient()
         
         if hard_init:
             logger.info("Запрошен полный сброс – очистка векторного хранилища")
@@ -46,7 +47,7 @@ class RagService:
                 chunk_batch: List[VectorItem] = []
                 BATCH_SIZE = 20
                 
-                async for meta in self.docling_worker.process_document(file_path):
+                async for meta in self.docling.process_document(file_path):
                     if isinstance(meta, HeaderMeta):
                         parent_ids = [
                             heading_text_to_id.get(pt) 

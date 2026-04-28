@@ -2,28 +2,67 @@ import uvicorn
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
-from core.app_state import state
 from core.config import settings
+from db.mongo import MongoDB
+from db.qdrant import QdrantDBClient
+from db.s3 import S3Client
 from models.factory import LLM, Embedder
-from services.ai_service import AiService
+from repositories.template_repository import TemplateRepository
+from services.docling_worker import DoclingWorker
 from services.rag_service import RagService
+from services.template_service import TemplateService
 from routers.ai_router import ai_router
+
 from utils.logging import logger
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     llm = await LLM.get_llm(settings.LLM_PROVIDER)
-    state.llm = llm
+    app.state.llm = llm
     embedder = await Embedder.get_embedder(settings.EMBEDDER_PROVIDER)
-    state.embedder = embedder
+    app.state.embedder = embedder
     
-    rag_service = RagService(embedder)
-    await rag_service.init_vector_store()
-    state.rag_service = rag_service
+    mongo = MongoDB()
+    await mongo.connect()
+    logger.info("MongoDB подключена")
+    app.state.mongo = mongo
+    
+    qdrant = QdrantDBClient()
+    logger.info("Qdrant подключен")
+    app.state.qdrant = qdrant
+    
+    s3 = S3Client()
+    await s3.start()
+    await s3.create_bucket_if_not_exists()
+    logger.info("S3 подключен")
+    app.state.s3 = s3
 
-    state.ai_service = AiService(llm, rag_service)
+    docling = DoclingWorker()
+    logger.info("Docling подключен")
+    app.state.docling = docling
+    
+    template_service = TemplateService(
+        TemplateRepository(),
+        docling,
+        qdrant,
+        llm,
+    )
+    await template_service.init_template_store(hard_init=False)
+    logger.info("Проиницилизировано хранилище шаблонов")
+    
+    rag_service = RagService(
+        embedder,
+        docling,
+        qdrant,
+    )
+    await rag_service.init_vector_store(hard_init=False)
+    logger.info("Проиницилизировано векторное хранилище")
 
     yield
+    
+    await mongo.disconnect()
+    await s3.stop()
+    logger.info("Всё было успешно завершено")
 
 app = FastAPI(
     title="AI Service API",

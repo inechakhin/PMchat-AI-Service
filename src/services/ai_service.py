@@ -31,7 +31,7 @@ from core.prompts import (
 )
 from services.document_exporter import DocumentExporter
 from services.rag_service import RagService
-from services.s3_client import S3Client
+from db.s3 import S3Client
 from services.template_service import TemplateService
 from utils.logging import logger
 
@@ -54,7 +54,7 @@ class AiService:
         self.s3_client = s3_client
     
     async def generate_response(self, request: AiRequest) -> AsyncGenerator[AiResponse, None]:
-        logger.info("Starting response generation for messages")
+        logger.info("Начало генерации ответа для сообщений")
         try:
             if len(request.messages) == 1:
                 if request.chat_type == "communication":
@@ -62,7 +62,7 @@ class AiService:
                 elif request.chat_type == "generation":
                     await self.skeleton_repository.create_empty(request.chat_id, SkeletonState.ELICITATION)
                 else:
-                    logger.error(f"Unexpected type: {request.chat_type} for chat {request.chat_id}")
+                    logger.error(f"Неожиданный тип чата: {request.chat_type} для чата {request.chat_id}")
                     yield AiResponse(
                         is_error=True,
                         error_message=f"Unexpected type: {request.chat_type} for chat {request.chat_id}",
@@ -94,7 +94,7 @@ class AiService:
                 )
                 tools = REVISION_TOOLS
             else:
-                logger.error(f"Unexpected state: {state} for chat {request.chat_id}")
+                logger.error(f"Неожиданное состояние: {state} для чата {request.chat_id}")
                 yield AiResponse(
                     is_error=True,
                     error_message=f"Unexpected state: {state} for chat {request.chat_id}",
@@ -118,23 +118,23 @@ class AiService:
             yield AiResponse(is_end=True).model_dump_json() + "\n"
         
         except asyncio.CancelledError:
-            logger.info("Generation cancelled by user")
+            logger.info("Генерация отменена пользователем")
             yield AiResponse(is_end=True).model_dump_json() + "\n"
         except ConnectionError as e:
-            logger.error(f"Ollama connection failed: {e}")
+            logger.error(f"Ошибка подключения к Ollama: {e}")
             yield AiResponse(
                 is_error=True,
-                error_message=f"Ollama service unavailable: {str(e)}",
+                error_message=f"Ollama недоступна: {str(e)}",
             ).model_dump_json() + "\n"
         except Exception as e:
-            logger.error(f"AI generation failed: {e}")
+            logger.error(f"Ошибка генерации AI: {e}")
             yield AiResponse(
                 is_error=True,
-                error_message=f"Generation failed: {str(e)}",
+                error_message=f"Ошибка генерации: {str(e)}",
             ).model_dump_json() + "\n"
     
     async def _generate_chat_title(self, request: AiRequest) -> str:
-        logger.info("Building messages for chat title generation")
+        logger.info("Построение сообщений для генерации названия чата")
         chat_title_messages = self._build_llm_messages(CHAT_TITLE_PROMPT, request.messages[-1:])
         response = await self.llm.invoke(chat_title_messages, tools=None)
         return response["message"]["content"]
@@ -170,10 +170,10 @@ class AiService:
         
         tool_calls = response["message"].get("tool_calls")
         if not tool_calls:
-            logger.info("No tool calls detected")
+            logger.info("Вызовы инструментов не обнаружены")
             return llm_messages, attachments, sources
         
-        logger.info("Processing tool call(s)")
+        logger.info("Обработка вызова(ов) инструментов")
         for tool_call in tool_calls:
             func_name = tool_call["function"]["name"]
             
