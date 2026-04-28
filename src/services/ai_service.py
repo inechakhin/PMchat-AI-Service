@@ -241,7 +241,10 @@ class AiService:
                 llm_messages.append({
                     "role": "tool",
                     "name": func_name,
-                    "content": json.dumps({"retrieved_docs": tool_response}, ensure_ascii=False),
+                    "content": json.dumps({
+                        "status": "success",
+                        "retrieved_docs": tool_response,
+                    }, ensure_ascii=False),
                 })
         
         return llm_messages, attachments, sources

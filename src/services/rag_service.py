@@ -163,6 +163,7 @@ class RagService:
         logger.info(f"Найдено {len(search_result.texts)} релевантных фрагментов")
 
         formatted_texts = []
+        titles = set()
         docs = []
         for doc, meta in zip(search_result.texts, search_result.metadatas):
             metadata_str = ", ".join(f"{k}: {v}" for k, v in meta.items())
@@ -170,10 +171,10 @@ class RagService:
                 f"Текст:\n{doc}\n\nМетаданные:\n{metadata_str}"
             )
             
-            title = meta.get("source_file", "Неизвестный документ")
-            docs.append({
-                "doc_title": title,
-            })
+            title = meta.get("title", "Неизвестный документ")
+            if title not in titles:
+                titles.add(title)
+                docs.append({"doc_title": title})
         
         logger.info("Фрагменты документов отформатированы для ответа")
         return "\n---\n".join(formatted_texts), docs
