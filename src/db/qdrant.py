@@ -170,12 +170,13 @@ class QdrantDBClient:
         for point in points:
             payload = point.payload
             ids.append(point.id)
-            vectors.append(point.vector)
+            vectors.append(point.vector if point.vector is not None else [])
             documents.append(payload["text"])
             metadatas.append(payload["metadata"])
 
         return GetResult(
             ids=ids,
+            vectors=vectors,
             texts=documents,
             metadatas=metadatas,
         )

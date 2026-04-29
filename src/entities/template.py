@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List
 
 from entities.enums.document_type import DocumentType
-from section import Section
+from entities.section import Section
 
 class Template(Document):
 
@@ -25,7 +25,7 @@ class Template(Document):
         self.updated_at = now
 
     def to_dict(self) -> dict:
-        data = self.model_dump(exclude={"id"})
+        data = self.model_dump()
         data["id"] = str(self.id)
         return data
 

@@ -204,7 +204,6 @@ class RagService:
             metadata={
                 "doc_type": meta.doc_type,
                 "headings": heading_ids,
-                "page_numbers": meta.page_numbers,
                 "source_file": meta.source_file,
             }
         )

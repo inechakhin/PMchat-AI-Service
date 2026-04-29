@@ -1,17 +1,17 @@
 from beanie import Document, Indexed, before_event, Replace, Insert
-from pydantic import Field
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import List, Optional
 
 from entities.enums.document_type import DocumentType
 from entities.enums.skeleton_state import SkeletonState
-from section import Section
+from entities.section import Section
 
 class Skeleton(Document):
 
     chat_id: str = Indexed(unique=True)
     state: SkeletonState
-    type: Optional[DocumentType] = Indexed()
+    type: DocumentType = Field(default=None)
     custom_type_name: Optional[str] = Field(default=None)
     requirements: str = Field(default="")
     document: List[Section] = Field(default_factory=list)
@@ -29,10 +29,15 @@ class Skeleton(Document):
         self.updated_at = now
 
     def to_dict(self) -> dict:
-        data = self.model_dump(exclude={"id", "chat"})
+        data = self.model_dump()
         data["id"] = str(self.id)
-        data["chat_id"] = str(self.chat_id)
         return data
 
     def __repr__(self):
-        return f"Skeleton(id={self.id}, chat_id={self.chat_id}, state={self.state}, type={self.type.value})"
+        return f"Skeleton(id={self.id}, chat_id={self.chat_id}, state={self.state.value})"
+
+class SkeletonMetadata(BaseModel):
+    state: SkeletonState
+    type: Optional[DocumentType] = None
+    custom_type_name: Optional[str] = None
+    requirements: Optional[str] = ""

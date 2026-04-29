@@ -103,7 +103,7 @@ class TemplateService:
         
         headers_get_result = await self.vector_store.query(
             collection_name=settings.HEADERS_COLLECTION,
-            filter_dict={"doc_type": doc_type.value},
+            filter={"doc_type": doc_type.value},
             with_vectors=True,
             limit=LIMIT,
         )
@@ -129,7 +129,7 @@ class TemplateService:
             clusters[label]["titles"].append(headers_get_result.texts[i])
             clusters[label]["levels"].append(headers_get_result.metadatas[i].get("section_level", 1))
 
-        min_cluster_size = max(2, len(headers_get_result) * 0.05)
+        min_cluster_size = max(2, len(headers_get_result.texts) * 0.05)
         valid_clusters = [c for c in clusters.values() if len(c["titles"]) >= min_cluster_size]        
         
         final_sections = await self._process_clusters_with_llm(doc_type.value, valid_clusters)

@@ -87,7 +87,6 @@ class TemplateRepository:
         ).project({
             "sections": {"$slice": [section_index, 1]}
         })
-        section_dict = template.sections[0] if template and template.sections else None
-        if section_dict:
-            return Section.model_validate(section_dict)
+        if template and template.sections:
+            return Section.model_validate(template["sections"][0])
         return None

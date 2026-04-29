@@ -6,14 +6,14 @@ class ChatBase(ABC):
     @abstractmethod
     async def stream(
         self,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
     ) -> AsyncGenerator[str, None]:
         pass
 
     @abstractmethod
     async def invoke(
         self,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         tools: Optional[List[Dict]] = None,
     ) -> Dict[str, Any]:
         pass

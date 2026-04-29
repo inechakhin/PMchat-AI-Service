@@ -65,17 +65,16 @@ class AiService:
                     logger.error(f"Неожиданный тип чата: {request.chat_type} для чата {request.chat_id}")
                     yield AiResponse(
                         is_error=True,
-                        error_message=f"Unexpected type: {request.chat_type} for chat {request.chat_id}",
+                        error_message=f"Неожиданный тип чата: {request.chat_type} для чата {request.chat_id}",
                     ).model_dump_json() + "\n"
                 chat_title = await self._generate_chat_title(request)
                 yield AiResponse(chat_title=chat_title).model_dump_json() + "\n"
             
             metadata = await self.skeleton_repository.get_metadata_by_chat_id(request.chat_id)
-            state = metadata.get("state")
-            if state == SkeletonState.COMMUNICATION:
+            if metadata.state == SkeletonState.COMMUNICATION:
                 prompt = COMMUNICATION_PROMPT
                 tools = COMMUNICATION_TOOLS
-            elif state == SkeletonState.ELICITATION:
+            elif metadata.state == SkeletonState.ELICITATION:
                 prompt = ELICITATION_PROMPT.format(
                     doc_types_list="\n".join(
                         f"- {t.value}"
@@ -83,23 +82,21 @@ class AiService:
                     )
                 )
                 tools = ELICITATION_TOOLS
-            elif state == SkeletonState.REVISION:
-                doc_type = metadata.get("type")
-                custom_type_name = metadata.get("custom_type_name")
-                requirements = metadata.get("requirements")
-                
+            elif metadata.state == SkeletonState.REVISION:
                 prompt = REVISION_PROMPT.format(
-                    document_type=doc_type.value if doc_type != DocumentType.UNKNOWN else custom_type_name,
-                    requirements=requirements,
+                    document_type=metadata.type.value 
+                        if metadata.type != DocumentType.UNKNOWN 
+                        else metadata.custom_type_name,
+                    requirements=metadata.requirements,
                 )
                 tools = REVISION_TOOLS
             else:
-                logger.error(f"Неожиданное состояние: {state} для чата {request.chat_id}")
+                logger.error(f"Неожиданное состояние: {metadata.state} для чата {request.chat_id}")
                 yield AiResponse(
                     is_error=True,
-                    error_message=f"Unexpected state: {state} for chat {request.chat_id}",
+                    error_message=f"Неожиданное состояние: {metadata.state} для чата {request.chat_id}",
                 ).model_dump_json() + "\n"
-        
+            
             llm_messages = self._build_llm_messages(prompt, request.messages)
             response = await self.llm.invoke(llm_messages, tools=tools)
             
@@ -130,7 +127,7 @@ class AiService:
             logger.error(f"Ошибка генерации AI: {e}")
             yield AiResponse(
                 is_error=True,
-                error_message=f"Ошибка генерации: {str(e)}",
+                error_message=f"Ошибка генерации AI: {str(e)}",
             ).model_dump_json() + "\n"
     
     async def _generate_chat_title(self, request: AiRequest) -> str:
@@ -140,10 +137,10 @@ class AiService:
         return response["message"]["content"]
 
     def _build_llm_messages(
-        self, 
-        prompt: str, 
+        self,
+        prompt: str,
         ai_messages: List[AiMessage],
-    ) -> List[Dict[str, str]]:
+    ) -> List[Dict[str, Any]]:
         llm_messages = [
             {
                 "role": "system",

@@ -12,5 +12,4 @@ class ChunkMeta(BaseModel):
     text: str
     doc_type: str
     heading_titles: List[str]
-    page_numbers: List[int]
     source_file: str

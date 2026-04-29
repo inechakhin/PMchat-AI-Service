@@ -41,6 +41,14 @@ async def lifespan(app: FastAPI):
     logger.info("Docling подключен")
     app.state.docling = docling
     
+    rag_service = RagService(
+        embedder,
+        docling,
+        qdrant,
+    )
+    await rag_service.init_vector_store(hard_init=False)
+    logger.info("Проиницилизировано векторное хранилище")
+    
     template_service = TemplateService(
         TemplateRepository(),
         docling,
@@ -49,14 +57,6 @@ async def lifespan(app: FastAPI):
     )
     await template_service.init_template_store(hard_init=False)
     logger.info("Проиницилизировано хранилище шаблонов")
-    
-    rag_service = RagService(
-        embedder,
-        docling,
-        qdrant,
-    )
-    await rag_service.init_vector_store(hard_init=False)
-    logger.info("Проиницилизировано векторное хранилище")
 
     yield
     

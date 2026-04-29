@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
 
-from entities.skeleton import Skeleton, Section, SkeletonState
+from entities.skeleton import Skeleton, SkeletonMetadata, Section, SkeletonState
 
 class SkeletonRepository:
 
@@ -60,16 +60,10 @@ class SkeletonRepository:
     async def get_metadata_by_chat_id(
         self,
         chat_id: str
-    ) -> Optional[Dict[str, Any]]:
-        skeleton = await Skeleton.find_one(
+    ) -> Optional[SkeletonMetadata]:
+        return await Skeleton.find_one(
             Skeleton.chat_id == chat_id
-        ).project({
-            "document": 0,
-            "_id": 0,
-        })
-        if skeleton is None:
-            return None
-        return skeleton.model_dump()
+        ).project(SkeletonMetadata)
     
     async def get_total_sections_count(
         self,
@@ -93,5 +87,5 @@ class SkeletonRepository:
             "document": {"$slice": [section_index, 1]}
         })
         if skeleton and skeleton.document:
-            return skeleton.document[0]
+            return Section.model_validate(skeleton["document"][0])
         return None

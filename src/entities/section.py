@@ -3,7 +3,7 @@ from typing import List
 
 class Section(BaseModel):
 
-    title: str = Field(..., min_length=1, max_length=200)
+    title: str = Field(default="")
     text: str = Field(default="")
     children: List["Section"] = Field(default_factory=list)
 

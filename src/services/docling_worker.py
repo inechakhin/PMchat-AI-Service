@@ -26,7 +26,7 @@ class DoclingWorker:
         }
         self.converter = DocumentConverter(format_options=format_options)
         self.chunker = HybridChunker(
-            tokenizer="BAAI/bge-small-en-v1.5",
+            tokenizer="intfloat/multilingual-e5-large",
             max_tokens=512,
             merge_peers=True,
         )
@@ -71,14 +71,13 @@ class DoclingWorker:
         )
         
         for chunk in chunks:
-            heading_titles = getattr(chunk.meta, 'headings', [])
-            page_numbers = getattr(chunk.meta, 'page_numbers', [])
+            headings_attr = getattr(chunk.meta, 'headings', None)
+            heading_titles = headings_attr if headings_attr is not None else []
             
             yield ChunkMeta(
                 text=chunk.text,
                 doc_type=doc_type,
                 heading_titles=heading_titles,
-                page_numbers=page_numbers,
                 source_file=source_file,
             )
         
@@ -119,6 +118,9 @@ class DoclingWorker:
                     stack.append((level, new_section))
 
             elif item.label == DocItemLabel.TEXT:
+                if not stack:
+                    current_root = Section(title="", text="", children=[])
+                    stack = [(0, current_root)]
                 current_section = stack[-1][1]
                 if current_section.text:
                     current_section.text += "\n\n" + item.text

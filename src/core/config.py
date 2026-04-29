@@ -8,7 +8,7 @@ class Config(BaseSettings):
     BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
     LOGS_DIR: Path = BASE_DIR / "logs"
     DATA_DIR: Path = BASE_DIR / "data"
-    DATA_MD_DIR: Path = BASE_DIR / "data_md"
+    MD_DIR: Path = DATA_DIR / "md"
     TEMPLATES_DIR: Path = DATA_DIR / "templates"
     DOCS_DIR: Path = DATA_DIR / "docs"
     
@@ -22,8 +22,8 @@ class Config(BaseSettings):
     # S3
     S3_HOST: str = Field("localhost", env="S3_HOST")
     S3_PORT: int = Field("9000", env="S3_PORT")
-    S3_ACCESS_KEY: str = Field("minioadmin", env="S3_ACCESS_KEY")
-    S3_SECRET_KEY: str = Field("minioadmin", env="S3_SECRET_KEY")
+    S3_ACCESS_KEY: str | None = Field(None, env="S3_ACCESS_KEY")
+    S3_SECRET_KEY: str | None = Field(None, env="S3_SECRET_KEY")
     S3_BUCKET_NAME: str = Field("pmchat-documents", env="S3_BUCKET_NAME")
     S3_SECURE: bool = Field(False, env="S3_SECURE")
     
@@ -38,8 +38,8 @@ class Config(BaseSettings):
     OLLAMA_EMBEDDER_NAME: str = Field("qwen3-embedding:0.6b", env = "OLLAMA_EMBEDDER_NAME")
     
     # Yandex
-    YANDEX_FOLDER_ID: str = Field("", env="YANDEX_FOLDER_ID")
-    YANDEX_API_KEY: str = Field("", env="YANDEX_API_KEY")
+    YANDEX_FOLDER_ID: str | None = Field(None, env="YANDEX_FOLDER_ID")
+    YANDEX_API_KEY: str | None = Field(None, env="YANDEX_API_KEY")
     YANDEX_MODEL: str = Field("qwen3.5-35b-a3b-fp8/latest", env="YANDEX_MODEL")
     YANDEX_EMBEDDER_DOC: str = Field("text-search-doc/latest", env="YANDEX_EMBEDDER_DOC")
     YANDEX_EMBEDDER_QUERY: str = Field("text-search-query-1.0/latest", env="YANDEX_EMBEDDER_QUERY") 
@@ -47,7 +47,7 @@ class Config(BaseSettings):
     # Qdrant
     QDRANT_HOST: str = Field("localhost", env="QDRANT_HOST")
     QDRANT_PORT: int = Field(6333, env="QDRANT_PORT")
-    QDRANT_API_KEY: str = Field("", env = "QDRANT_API_KEY")
+    QDRANT_API_KEY: str | None = Field(None, env = "QDRANT_API_KEY")
     
     QDRANT_ON_DISK: bool = True
     QDRANT_HNSW_M: int = 16

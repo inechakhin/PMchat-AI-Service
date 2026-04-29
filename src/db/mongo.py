@@ -56,7 +56,7 @@ class MongoDB:
     
     async def disconnect(self):
         if self.client:
-            self.client.close()
+            await self.client.close()
             self.client = None
             self.db = None
             self._initialized = False
