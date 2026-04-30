@@ -1,7 +1,7 @@
 fastapi==0.136.1
 uvicorn[standard]==0.46.0
 
-openai==2.33.0
+ollama==0.6.2
 
 qdrant_client==1.17.1
 
@@ -10,9 +10,6 @@ beanie==2.1.0
 
 scikit_learn==1.8.0
 langchain_text_splitters==1.1.1
-
-docling==2.92.0
-docling_core==2.73.0
 
 pydantic==2.13.3
 pydantic_settings==2.14.0

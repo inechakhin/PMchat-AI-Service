@@ -8,7 +8,7 @@ from db.qdrant import QdrantDBClient
 from db.s3 import S3Client
 from models.factory import LLM, Embedder
 from repositories.template_repository import TemplateRepository
-from services.docling_worker import DoclingWorker
+from services.docx_worker import DocxWorker
 from services.rag_service import RagService
 from services.template_service import TemplateService
 from routers.ai_router import ai_router
@@ -37,13 +37,12 @@ async def lifespan(app: FastAPI):
     logger.info("S3 подключен")
     app.state.s3 = s3
 
-    docling = DoclingWorker()
-    logger.info("Docling подключен")
-    app.state.docling = docling
+    docx_worker = DocxWorker()
+    logger.info("DocxWorker подключен")
     
     rag_service = RagService(
         embedder,
-        docling,
+        docx_worker,
         qdrant,
     )
     await rag_service.init_vector_store(hard_init=False)
@@ -51,7 +50,7 @@ async def lifespan(app: FastAPI):
     
     template_service = TemplateService(
         TemplateRepository(),
-        docling,
+        docx_worker,
         qdrant,
         llm,
     )

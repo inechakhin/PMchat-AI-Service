@@ -1,4 +1,4 @@
-from fastapi import Request, Depends
+from fastapi import Depends
 
 from dependencies.db import get_qdrant, get_s3
 from dependencies.models import get_llm, get_embedder
@@ -9,7 +9,7 @@ from repositories.skeleton_repository import SkeletonRepository
 from repositories.template_repository import TemplateRepository
 
 from services.document_exporter import DocumentExporter
-from services.docling_worker import DoclingWorker
+from services.docx_worker import DocxWorker
 from services.template_service import TemplateService
 from services.rag_service import RagService
 
@@ -24,30 +24,30 @@ def get_template_repository() -> TemplateRepository:
 def get_document_exporter() -> DocumentExporter:
     return DocumentExporter()
 
-def get_docling(request: Request) -> DoclingWorker:
-    return request.app.state.docling
+def get_docx_worker() -> DocxWorker:
+    return DocxWorker()
 
 def get_template_service(
     template_repository: TemplateRepository = Depends(get_template_repository),
-    docling: DoclingWorker = Depends(get_docling),
+    docx_worker: DocxWorker = Depends(get_docx_worker),
     vector_store: QdrantDBClient = Depends(get_qdrant),
     llm: ChatBase = Depends(get_llm),
 ) -> TemplateService:
     return TemplateService(
         template_repository,
-        docling,
+        docx_worker,
         vector_store,
         llm,
     )
     
 def get_rag_service(
     embedder: ChatBase = Depends(get_embedder),
-    docling: DoclingWorker = Depends(get_docling),
+    docx_worker: DocxWorker = Depends(get_docx_worker),
     vector_store: QdrantDBClient = Depends(get_qdrant),
 ) -> RagService:
     return RagService(
         embedder,
-        docling,
+        docx_worker,
         vector_store,
     )
 

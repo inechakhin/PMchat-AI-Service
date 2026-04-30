@@ -5,8 +5,8 @@ from typing import List, Dict, Tuple
 from models.base import ChatBase
 from db.qdrant import QdrantDBClient
 from schemas.vector import VectorItem
-from schemas.docling import HeaderMeta, ChunkMeta
-from services.docling_worker import DoclingWorker
+from schemas.docx import HeaderMeta, ChunkMeta
+from services.docx_worker import DocxWorker
 from core.config import settings
 from utils.data_working import get_files_by_ext
 from utils.logging import logger
@@ -16,11 +16,11 @@ class RagService:
     def __init__(
         self, 
         embedder: ChatBase,
-        docling: DoclingWorker,
+        docx_worker: DocxWorker,
         vector_store: QdrantDBClient,
     ):
         self.embedder = embedder
-        self.docling = docling
+        self.docx_worker = docx_worker
         self.vector_store = vector_store
 
     async def init_vector_store(self, hard_init: bool = False) -> None:
@@ -47,7 +47,7 @@ class RagService:
                 chunk_batch: List[VectorItem] = []
                 BATCH_SIZE = 20
                 
-                async for meta in self.docling.process_document(file_path):
+                async for meta in self.docx_worker.process_document(file_path):
                     if isinstance(meta, HeaderMeta):
                         parent_ids = [
                             heading_text_to_id.get(pt) 

@@ -11,7 +11,7 @@ from entities.enums.document_type import DocumentType
 from entities.section import Section
 from models.base import ChatBase
 from repositories.template_repository import TemplateRepository
-from services.docling_worker import DoclingWorker
+from services.docx_worker import DocxWorker
 from core.config import settings
 from core.prompts import TEMPLATE_GENERATING_PROMPT, TEMPLATE_BUILDER_PROMPT
 from utils.data_working import get_files_by_ext, get_document_type
@@ -24,12 +24,12 @@ class TemplateService:
     def __init__(
         self,
         template_repository: TemplateRepository,
-        docling: DoclingWorker,
+        docx_worker: DocxWorker,
         vector_store: QdrantDBClient,
         llm: ChatBase,
     ):
         self.template_repository = template_repository
-        self.docling = docling
+        self.docx_worker = docx_worker
         self.vector_store = vector_store
         self.llm = llm
 
@@ -92,7 +92,7 @@ class TemplateService:
             await self.template_repository.create_empty(doc_type)
             logger.debug(f"Шаблон {doc_type} инициализирован в базе")
 
-            async for root_section in self.docling.process_template_document(file_path):
+            async for root_section in self.docx_worker.process_template_document(file_path):
                 await self.template_repository.add_section(doc_type, root_section)
                 logger.debug(f"Секция '{root_section.title}' добавлена в БД")
 

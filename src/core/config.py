@@ -53,8 +53,8 @@ class Config(BaseSettings):
     QDRANT_HNSW_M: int = 16
     
     # Text splitter
-    MAX_CHUNK_SIZE: int = 2048
-    CHUNK_OVERLAP: int = 256
+    MAX_CHUNK_SIZE: int = 1024
+    CHUNK_OVERLAP: int = 128
     
     # RAG Service
     HEADERS_COLLECTION: str = "doc_headers"
