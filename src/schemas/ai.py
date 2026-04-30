@@ -11,7 +11,7 @@ class AiRequest(BaseModel):
     messages: List[AiMessage]
     
 class AiSource(BaseModel):
-    doc_title: str
+    title: str
 
 class AiAttachment(BaseModel):
     file_name: str

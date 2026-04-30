@@ -171,10 +171,10 @@ class RagService:
                 f"Текст:\n{doc}\n\nМетаданные:\n{metadata_str}"
             )
             
-            title = meta.get("title", "Неизвестный документ")
+            title = meta.get("source_file", "Неизвестный документ")
             if title not in titles:
                 titles.add(title)
-                docs.append({"doc_title": title})
+                docs.append({"title": title})
         
         logger.info("Фрагменты документов отформатированы для ответа")
         return "\n---\n".join(formatted_texts), docs
