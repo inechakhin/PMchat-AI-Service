@@ -56,7 +56,7 @@ class AiService:
     async def generate_response(self, request: AiRequest) -> AsyncGenerator[AiResponse, None]:
         logger.info("Начало генерации ответа для сообщений")
         try:
-            if len(request.messages) == 1:
+            if not await self.skeleton_repository.exist_by_chat_id(request.chat_id):
                 if request.chat_type == "communication":
                     await self.skeleton_repository.create_empty(request.chat_id, SkeletonState.COMMUNICATION)
                 elif request.chat_type == "generation":
@@ -67,8 +67,6 @@ class AiService:
                         is_error=True,
                         error_message=f"Неожиданный тип чата: {request.chat_type} для чата {request.chat_id}",
                     ).model_dump_json() + "\n"
-                chat_title = await self._generate_chat_title(request)
-                yield AiResponse(chat_title=chat_title).model_dump_json() + "\n"
             
             metadata = await self.skeleton_repository.get_metadata_by_chat_id(request.chat_id)
             if metadata.state == SkeletonState.COMMUNICATION:
@@ -84,10 +82,7 @@ class AiService:
                 tools = ELICITATION_TOOLS
             elif metadata.state == SkeletonState.REVISION:
                 prompt = REVISION_PROMPT.format(
-                    document_type=metadata.type.value 
-                        if metadata.type != DocumentType.UNKNOWN 
-                        else metadata.custom_type_name,
-                    requirements=metadata.requirements,
+                    document_type=metadata.get_doc_type(),
                 )
                 tools = REVISION_TOOLS
             else:
@@ -100,8 +95,10 @@ class AiService:
             llm_messages = self._build_llm_messages(prompt, request.messages)
             response = await self.llm.invoke(llm_messages, tools=tools)
             
+            # Сделать один вызов? И имитировать стриминг?
+            
             llm_messages, attachments, sources = await self._handle_tool_calls(request.chat_id, llm_messages, response)
-                    
+            
             async for token in self.llm.stream(llm_messages):
                 if token:
                     yield AiResponse(token=token).model_dump_json() + "\n"
@@ -111,6 +108,10 @@ class AiService:
         
             if sources:
                 yield AiResponse(sources=sources).model_dump_json() + "\n"
+        
+            if len(request.messages) == 1:
+                chat_title = await self._generate_chat_title(request)
+                yield AiResponse(chat_title=chat_title).model_dump_json() + "\n"
         
             yield AiResponse(is_end=True).model_dump_json() + "\n"
         
@@ -175,15 +176,20 @@ class AiService:
             func_name = tool_call["function"]["name"]
             
             if func_name == "finalize_requirements":
-                doc_type_str = tool_call["function"]["arguments"]["doc_type"]
+                doc_type_str = tool_call["function"]["arguments"].get("doc_type")
                 custom_type_name = tool_call["function"]["arguments"].get("custom_type_name")
-                requirements = tool_call["function"]["arguments"]["requirements"]
+                requirements = tool_call["function"]["arguments"].get("requirements")
+                logger.info(f"ИИ вызвала finalize_requirements с параметрами doc_type={doc_type_str}, custom_type_name={custom_type_name}")
 
                 await self._init_document_skeleton(chat_id, doc_type_str, custom_type_name, requirements)
+                metadata = await self.skeleton_repository.get_metadata_by_chat_id(chat_id)
+                doc_type = metadata.get_doc_type()
                 
-                retelling = await self._generate_document(chat_id, doc_type_str, requirements)
+                retelling = await self._generate_document(chat_id, doc_type, requirements)
 
-                attachment = await self._export_and_upload_document(chat_id)
+                retelling=requirements
+
+                attachment = await self._export_and_upload_document(chat_id, doc_type)
                 if attachment:
                     attachments.append(attachment)
                 
@@ -202,6 +208,7 @@ class AiService:
             elif func_name == "finalize_comments":
                 section_title = tool_call["function"]["arguments"]["section_title"]
                 comments = tool_call["function"]["arguments"]["comments"]
+                logger.info(f"ИИ вызвала finalize_comments с параметром section_title={section_title}")
                 
                 new_section_text = await self._regenerate_section(chat_id, section_title, comments)
                 
@@ -231,6 +238,7 @@ class AiService:
             elif func_name == "search_project_docs":
                 query = tool_call["function"]["arguments"]["query"]
                 top_k = tool_call["function"]["arguments"]["top_k"]
+                logger.info(f"ИИ вызвала finalize_comments с параметрами query={query}, top_k={top_k}")
                 
                 tool_response, docs = await self.rag.get_relevant_docs(query=query, limit=top_k)
                 sources = [AiSource.model_validate(doc) for doc in docs]
@@ -253,11 +261,13 @@ class AiService:
         custom_type_name: str,
         requirements: str,
     ) -> None:
+        logger.info("Инициализация скелета для документа")
         try:
             doc_type = DocumentType(doc_type_str)
         except ValueError:
             doc_type = DocumentType.UNKNOWN
-            custom_type_name = doc_type_str
+            if doc_type_str:
+                custom_type_name = doc_type_str
         
         update_data = {
             "type": doc_type,
@@ -277,7 +287,7 @@ class AiService:
     async def _generate_document(
         self, 
         chat_id: str,
-        doc_type_str: str, 
+        doc_type: str, 
         requirements: str
     ) -> str:
         total_sections = await self.skeleton_repository.get_total_sections_count(chat_id)
@@ -289,10 +299,10 @@ class AiService:
         async def process_section(sec: Section, prev_ctx: str) -> Tuple[Section, str]:
             logger.info(f"Генерация раздела: {sec.title}")
             
-            rag_context = await self.rag.search_with_boosting(sec.text, doc_type_str, sec.title)
+            rag_context = await self.rag.search_with_boosting(sec.text, doc_type, sec.title)
             
             prompt = GENERATING_PROMPT.format(
-                document_type=doc_type_str,
+                document_type=doc_type,
                 requirements=requirements,
                 section_title=sec.title,
                 section_requirements=sec.text,

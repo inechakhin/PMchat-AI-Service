@@ -4,6 +4,14 @@ from typing import Optional, Dict, Any
 from entities.skeleton import Skeleton, SkeletonMetadata, Section, SkeletonState
 
 class SkeletonRepository:
+    
+    async def exist_by_chat_id(
+        self,
+        chat_id: str,
+    ) -> bool:
+        return await Skeleton.find(
+            Skeleton.chat_id == chat_id
+        ).exists()
 
     async def create_empty(
         self,
@@ -81,11 +89,13 @@ class SkeletonRepository:
         chat_id: str,
         section_index: int
     ) -> Optional[Section]:
-        skeleton = await Skeleton.find_one(
-            Skeleton.chat_id == chat_id
-        ).project({
-            "document": {"$slice": [section_index, 1]}
-        })
-        if skeleton and skeleton.document:
-            return Section.model_validate(skeleton["document"][0])
-        return None
+        results = await Skeleton.aggregate([
+            {"$match": {"chat_id": chat_id}},
+            {"$project": {
+                "_id": 0, 
+                "target_section": {"$arrayElemAt": ["$document", section_index]}
+            }},
+        ]).to_list()
+        if not results or "target_section" not in results[0] or results[0]["target_section"] is None:
+            return None
+        return Section.model_validate(results[0]["target_section"])

@@ -41,3 +41,6 @@ class SkeletonMetadata(BaseModel):
     type: Optional[DocumentType] = None
     custom_type_name: Optional[str] = None
     requirements: Optional[str] = ""
+    
+    def get_doc_type(self):
+        return self.type.value if self.type != DocumentType.UNKNOWN else self.custom_type_name

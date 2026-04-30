@@ -9,10 +9,9 @@ class TemplateRepository:
         self, 
         doc_type: DocumentType,
     ) -> bool:
-        count = await Template.find(
+        return await Template.find(
             Template.type == doc_type
-        ).count()
-        return count > 0
+        ).exists()
 
     async def create_empty(
         self,
@@ -82,11 +81,13 @@ class TemplateRepository:
         doc_type: DocumentType,
         section_index: int,
     ) -> Optional[Section]:
-        template = await Template.find_one(
-           Template.type == doc_type
-        ).project({
-            "sections": {"$slice": [section_index, 1]}
-        })
-        if template and template.sections:
-            return Section.model_validate(template["sections"][0])
-        return None
+        results = await Template.aggregate([
+            {"$match": {"type": doc_type}},
+            {"$project": {
+                "_id": 0, 
+                "target_section": {"$arrayElemAt": ["$sections", section_index]}
+            }}
+        ]).to_list()
+        if not results or "target_section" not in results[0] or results[0]["target_section"] is None:
+            return None
+        return Section.model_validate(results[0]["target_section"])
