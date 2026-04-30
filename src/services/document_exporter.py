@@ -14,6 +14,7 @@ class DocumentExporter:
         "base": RGBColor(0, 0, 0), # Черный
         "ai": RGBColor(128, 128, 128), # Серый
         "human": RGBColor(204, 0, 0), # Красный
+        "default": RGBColor(0, 0, 0), # Черный
     }
 
     async def build_docx_iteratively(self, chat_id: str, repo: SkeletonRepository) -> io.BytesIO:

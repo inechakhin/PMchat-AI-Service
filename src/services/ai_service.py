@@ -95,8 +95,6 @@ class AiService:
             llm_messages = self._build_llm_messages(prompt, request.messages)
             response = await self.llm.invoke(llm_messages, tools=tools)
             
-            # Сделать один вызов? И имитировать стриминг?
-            
             llm_messages, attachments, sources = await self._handle_tool_calls(request.chat_id, llm_messages, response)
             
             async for token in self.llm.stream(llm_messages):
@@ -169,6 +167,11 @@ class AiService:
         tool_calls = response["message"].get("tool_calls")
         if not tool_calls:
             logger.info("Вызовы инструментов не обнаружены")
+            llm_messages.append({
+                "role": "tool",
+                "name": "none",
+                "content": "Инструменты не вызваны, необходимо ответить пользователю.",
+            })
             return llm_messages, attachments, sources
         
         logger.info("Обработка вызова(ов) инструментов")
