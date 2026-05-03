@@ -83,6 +83,7 @@ class AiService:
             elif metadata.state == SkeletonState.REVISION:
                 prompt = REVISION_PROMPT.format(
                     document_type=metadata.get_doc_type(),
+                    requirements=metadata.requirements,
                 )
                 tools = REVISION_TOOLS
             else:
@@ -216,7 +217,10 @@ class AiService:
                 new_section_text = await self._regenerate_section(chat_id, section_title, comments)
                 
                 if new_section_text:
-                    attachment = await self._export_and_upload_document(chat_id)
+                    metadata = await self.skeleton_repository.get_metadata_by_chat_id(chat_id)
+                    doc_type = metadata.get_doc_type()
+                    
+                    attachment = await self._export_and_upload_document(chat_id, doc_type)
                     if attachment:
                         attachments.append(attachment)
                     

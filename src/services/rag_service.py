@@ -58,7 +58,7 @@ class RagService:
                         heading_text_to_id[header_vector.text] = header_vector.id
                         header_batch.append(header_vector)
                         if len(header_batch) >= BATCH_SIZE:
-                            await self._flush_batch(settings.HEADERS_COLLECTION, header_batch)
+                            await self._flush_batch(settings.HEADERS_COLLECTION, header_batch.copy())
                             header_batch.clear()
                             
                     elif isinstance(meta, ChunkMeta):
@@ -70,13 +70,13 @@ class RagService:
                         chunk_vector = await self._create_chunk_vector_item(meta, heading_ids)
                         chunk_batch.append(chunk_vector)
                         if len(chunk_batch) >= BATCH_SIZE:
-                            await self._flush_batch(settings.CHUNKS_COLLECTION, chunk_batch)
+                            await self._flush_batch(settings.CHUNKS_COLLECTION, chunk_batch.copy())
                             chunk_batch.clear()
                         
                 if header_batch:
-                    await self._flush_batch(settings.HEADERS_COLLECTION, header_batch)
+                    await self._flush_batch(settings.HEADERS_COLLECTION, header_batch.copy())
                 if chunk_batch:
-                    await self._flush_batch(settings.CHUNKS_COLLECTION, chunk_batch)
+                    await self._flush_batch(settings.CHUNKS_COLLECTION, chunk_batch.copy())
                 
             except Exception as e:
                 logger.error(f"Ошибка при обработке файла {file_path}: {e}")
