@@ -28,8 +28,8 @@ class Config(BaseSettings):
     S3_SECURE: bool = Field(False, validation_alias="S3_SECURE")
     
     # Providers
-    LLM_PROVIDER: str = "ollama"
-    EMBEDDER_PROVIDER: str = "ollama"
+    LLM_PROVIDER: str = Field("ollama", validation_alias="LLM_PROVIDER")
+    EMBEDDER_PROVIDER: str = Field("ollama", validation_alias="EMBEDDER_PROVIDER")
     
     # Ollama
     OLLAMA_HOST: str = Field("localhost", validation_alias="OLLAMA_HOST")

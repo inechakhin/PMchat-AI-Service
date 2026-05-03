@@ -191,8 +191,6 @@ class AiService:
                 
                 retelling = await self._generate_document(chat_id, doc_type, requirements)
 
-                retelling=requirements
-
                 attachment = await self._export_and_upload_document(chat_id, doc_type)
                 if attachment:
                     attachments.append(attachment)

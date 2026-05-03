@@ -88,7 +88,7 @@ class RagService:
         query: str,
         doc_type: str,
         header: str,
-        limit: int = 5,
+        limit: int = 10,
     ) -> str:
         logger.info(f"Поиск с бустингом: doc_type='{doc_type}', header='{header}'")
         

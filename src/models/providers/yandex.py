@@ -27,6 +27,7 @@ class ChatYandex(ChatBase):
         self.temperature = temperature
         self.timeout = timeout
         self.max_retries = max_retries
+        self.reasoning_effort = "none"
 
         self.client = AsyncOpenAI(
             base_url="https://ai.api.cloud.yandex.net/v1",
@@ -45,6 +46,7 @@ class ChatYandex(ChatBase):
                 input=input_text,
                 stream=True,
                 temperature=self.temperature,
+                extra_body={"reasoning_effort": self.reasoning_effort},
             )
 
             async for event in stream:
@@ -75,6 +77,7 @@ class ChatYandex(ChatBase):
                 input=input_text,
                 tools=tools_schema,
                 temperature=self.temperature,
+                extra_body={"reasoning_effort": self.reasoning_effort},
             )
 
             content = response.output_text or ""
