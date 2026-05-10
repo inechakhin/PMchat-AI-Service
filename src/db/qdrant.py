@@ -36,7 +36,8 @@ class QdrantDBClient:
         collection_name: str,
         vector: List[float | int],
         filter: Optional[dict] = None,
-        limit: int = 10,
+        with_vectors: Optional[bool] = False,
+        limit: Optional[int] = None,
     ) -> Optional[SearchResult]:
         query_filter = None
         if filter:
@@ -47,31 +48,35 @@ class QdrantDBClient:
             collection_name=collection_name,
             query=vector,
             query_filter=query_filter,
+            with_vectors=with_vectors,
             limit=limit,
         )
         
         return self._points_to_search_result(query_response.points)
     
     async def query(
-        self, 
-        collection_name: str, 
-        filter: dict, 
-        limit: Optional[int] = None
+        self,
+        collection_name: str,
+        filter: dict,
+        with_vectors: Optional[bool] = False,
+        limit: Optional[int] = None,
     ) -> Optional[GetResult]:
         if not await self.has_collection(collection_name):
             return None
         try:
             field_conditions = self._create_field_conditions(filter)
+            scroll_filter = models.Filter(should=field_conditions)
             
             points = await self.client.scroll(
                 collection_name=collection_name,
-                scroll_filter=models.Filter(should=field_conditions),
+                scroll_filter=scroll_filter,
+                with_vectors=with_vectors,
                 limit=limit,
             )
             
             return self._points_to_get_result(points[0])
         except Exception as e:
-            logger.exception(f"Error querying a collection '{collection_name}': {e}")
+            logger.exception(f"Ошибочный query для коллекции '{collection_name}': {e}")
             return None
     
     async def insert(self, collection_name: str, items: List[VectorItem]) -> None:
@@ -98,10 +103,11 @@ class QdrantDBClient:
             )
         elif filter:
             field_conditions = self._create_field_conditions(filter)
+            delete_filter = models.Filter(must=field_conditions)
             
             return await self.client.delete(
                 collection_name=collection_name,
-                points_selector=models.FilterSelector(filter=models.Filter(must=field_conditions)),
+                points_selector=models.FilterSelector(filter=delete_filter),
             )
     
     async def reset(self) -> None:
@@ -122,7 +128,24 @@ class QdrantDBClient:
                 m=settings.QDRANT_HNSW_M,
             ),
         )
-        # TODO Create payload indexes for efficient filtering
+        await self.client.create_payload_index(
+            collection_name=collection_name,
+            field_name='metadata.doc_type',
+            field_schema=models.KeywordIndexParams(
+                type=models.KeywordIndexType.KEYWORD,
+                is_tenant=False,
+                on_disk=settings.QDRANT_ON_DISK,
+            ),
+        )
+        await self.client.create_payload_index(
+            collection_name=collection_name,
+            field_name='metadata.source_file',
+            field_schema=models.KeywordIndexParams(
+                type=models.KeywordIndexType.KEYWORD,
+                is_tenant=False,
+                on_disk=settings.QDRANT_ON_DISK,
+            ),
+        )
     
     async def _create_collection_if_not_exists(self, collection_name: str, dimension: int) -> None:
         if not await self.has_collection(collection_name):
@@ -140,26 +163,30 @@ class QdrantDBClient:
     
     def _points_to_get_result(self, points) -> GetResult:
         ids = []
+        vectors = []
         documents = []
         metadatas = []
 
         for point in points:
             payload = point.payload
             ids.append(point.id)
+            vectors.append(point.vector if point.vector is not None else [])
             documents.append(payload["text"])
             metadatas.append(payload["metadata"])
 
         return GetResult(
             ids=ids,
-            documents=documents,
+            vectors=vectors,
+            texts=documents,
             metadatas=metadatas,
         )
         
-    def _points_to_search_result(self, points) -> GetResult:
+    def _points_to_search_result(self, points) -> SearchResult:
         get_result = self._points_to_get_result(points)
         return SearchResult(
             ids=get_result.ids,
-            documents=get_result.documents,
+            vectors=get_result.vectors,
+            texts=get_result.texts,
             metadatas=get_result.metadatas,
             # qdrant distance is [-1, 1], normalize to [0, 1]
             distances=[(point.score + 1.0) / 2.0 for point in points],

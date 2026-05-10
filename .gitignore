@@ -72,8 +72,7 @@ Thumbs.db
 
 .env
 
-data/
-data_md/
+all_data/
 
 *.csv
 *.xlsx
